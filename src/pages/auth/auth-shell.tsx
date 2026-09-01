@@ -17,7 +17,7 @@ function AuthShell({ title, subtitle, children, footer }: AuthShellProps) {
             <div className="mb-3 flex items-center justify-center gap-1">
               <img src={veiserMark} alt="Veiser" className="h-10 w-auto" />
               <span
-                className="text-5xl font-semibold tracking-tight text-foreground"
+                className="text-[44px] leading-none font-semibold tracking-tight text-foreground"
                 style={{ fontFamily: "'Urbanist', 'Noto Sans', sans-serif" }}
               >
                 Test
