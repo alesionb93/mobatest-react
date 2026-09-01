@@ -74,7 +74,7 @@ function ShareReportModal({ open, onClose, run, onTogglePublic, onEnsureToken }:
           </div>
         )}
         <p className="text-xs text-muted-foreground">
-          Sem o link ativado, apenas quem tem acesso ao Mobatest (login) consegue ver esta execução.
+          Sem o link ativado, apenas quem tem acesso ao Veiser Test (login) consegue ver esta execução.
         </p>
       </div>
     </Modal>

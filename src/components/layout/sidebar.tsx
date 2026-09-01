@@ -28,12 +28,10 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
       )}
     >
       <div className="h-14 flex items-center gap-2 px-4 border-b border-sidebar-border">
-        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground text-xs font-semibold">
-          {activeProject ? activeProject.code.slice(0, 2).toUpperCase() : "M"}
-        </div>
+        <img src="/veiser-icon.png" alt="Veiser" className="h-7 w-7 shrink-0 rounded-md object-cover" />
         {!collapsed && (
           <span className="text-sm font-semibold text-sidebar-foreground truncate">
-            {activeProject ? activeProject.name : "Mobatest"}
+            {activeProject ? activeProject.name : "Veiser Test"}
           </span>
         )}
       </div>

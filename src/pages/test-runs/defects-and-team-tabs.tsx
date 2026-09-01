@@ -116,7 +116,7 @@ function TeamTab({ runCases, profiles, currentUserId }: { runCases: TestRunCase[
         </Table>
       </div>
       <p className="text-xs text-muted-foreground">
-        Observação: o Mobatest usa "Pré-existente" no lugar de "Retest"/"Invalid" do Qase — são os status
+        Observação: o Veiser Test usa "Pré-existente" no lugar de "Retest"/"Invalid" do Qase — são os status
         disponíveis neste app.
       </p>
     </div>

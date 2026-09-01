@@ -3,7 +3,7 @@ import { Outlet } from "react-router-dom";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Topbar } from "@/components/layout/topbar";
 
-const COLLAPSE_STORAGE_KEY = "mobatest:sidebar-collapsed";
+const COLLAPSE_STORAGE_KEY = "veiser-test:sidebar-collapsed";
 
 function AppLayout() {
   const [collapsed, setCollapsed] = React.useState(

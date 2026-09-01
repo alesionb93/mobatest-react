@@ -22,7 +22,7 @@ interface ProjectContextValue {
 
 const ProjectContext = React.createContext<ProjectContextValue | undefined>(undefined);
 
-const STORAGE_KEY = "mobatest:active-project-id";
+const STORAGE_KEY = "veiser-test:active-project-id";
 
 export function ProjectProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();

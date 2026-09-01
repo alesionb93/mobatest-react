@@ -253,7 +253,7 @@ function InviteMemberModal({ open, onClose, onInvited }: { open: boolean; onClos
     if (!foundUser) {
       setSaving(false);
       setFeedback(
-        "Nenhuma conta encontrada com esse e-mail. Peça pra pessoa criar uma conta no Mobatest primeiro — depois é só convidar de novo."
+        "Nenhuma conta encontrada com esse e-mail. Peça pra pessoa criar uma conta no Veiser Test primeiro — depois é só convidar de novo."
       );
       return;
     }
@@ -296,7 +296,7 @@ function InviteMemberModal({ open, onClose, onInvited }: { open: boolean; onClos
             placeholder="pessoa@empresa.com"
             autoFocus
           />
-          <p className="text-xs text-muted-foreground">A pessoa precisa já ter uma conta no Mobatest com esse e-mail.</p>
+          <p className="text-xs text-muted-foreground">A pessoa precisa já ter uma conta no Veiser Test com esse e-mail.</p>
         </div>
         <Select
           label="Papel"

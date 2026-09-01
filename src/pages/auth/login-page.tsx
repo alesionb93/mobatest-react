@@ -31,7 +31,7 @@ function LoginPage() {
 
   return (
     <AuthShell
-      title="Entrar no Mobatest"
+      title="Bem-vindo(a)"
       subtitle="Gestão de testes de QA"
       footer={
         <>

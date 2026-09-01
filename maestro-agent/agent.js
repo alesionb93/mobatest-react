@@ -1,8 +1,8 @@
 // ============================================================
-// Mobatest — Agente local do Maestro
+// Veiser Test — Agente local do Maestro
 // ============================================================
 // O que isso faz: cria uma "portinha" local (http://127.0.0.1:PORTA)
-// que a tela do Mobatest, aberta no navegador, consegue chamar. Quando
+// que a tela do Veiser Test, aberta no navegador, consegue chamar. Quando
 // chamada, ele roda de verdade o comando "maestro test" na máquina do
 // usuário, espera o resultado, e devolve pro navegador se passou ou
 // falhou — que aí marca o status certo direto na execução.
@@ -11,7 +11,7 @@
 //   1) Edite config.json com o caminho da pasta raiz dos seus .yaml.
 //   2) Rode: node agent.js
 //   3) Deixe essa janela do terminal aberta enquanto usar o botão
-//      "Executar automatizado" no Mobatest.
+//      "Executar automatizado" no Veiser Test.
 
 const http = require('http');
 const { exec } = require('child_process');
@@ -83,7 +83,7 @@ function resolveSafeScriptPath(scriptPath) {
 }
 
 // Varre a pasta de testes em busca de arquivos .yaml, pra alimentar a lista
-// de escolha no Mobatest (em vez do QA digitar o caminho na mão). Ignora
+// de escolha no Veiser Test (em vez do QA digitar o caminho na mão). Ignora
 // arquivos que começam com "_" (ex: _TEMPLATE.yaml).
 function collectYamlFiles(rootAbs, rootRel) {
   let results = [];
@@ -275,5 +275,5 @@ server.listen(PORT, '127.0.0.1', () => {
   console.log(`   Escutando em: http://127.0.0.1:${PORT}`);
   console.log(`   Pasta dos testes: ${config.baseFolder}`);
   console.log(`   Origem(ns) liberada(s): ${ALLOWED_ORIGINS.join(', ')}`);
-  console.log('\n   Deixe esta janela aberta enquanto usar o botão "Executar automatizado" no Mobatest.\n');
+  console.log('\n   Deixe esta janela aberta enquanto usar o botão "Executar automatizado" no Veiser Test.\n');
 });

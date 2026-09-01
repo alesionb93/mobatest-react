@@ -71,7 +71,7 @@ function StyleGuidePage() {
     <div className="min-h-screen bg-background p-8">
       <div className="mx-auto max-w-3xl flex flex-col gap-8">
         <div>
-          <h1 className="text-2xl font-semibold text-foreground">Mobatest — Style Guide</h1>
+          <h1 className="text-2xl font-semibold text-foreground">Veiser Test — Style Guide</h1>
           <p className="text-sm text-muted-foreground mt-1">
             Vitrine dos tokens e componentes base do design system Veiser Dados.
           </p>

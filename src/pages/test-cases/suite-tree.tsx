@@ -7,7 +7,7 @@ import { Modal } from "@/components/ui/modal";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 
-const WIDTH_STORAGE_KEY = "mobatest:suite-tree-width";
+const WIDTH_STORAGE_KEY = "veiser-test:suite-tree-width";
 const MIN_WIDTH = 220;
 const MAX_WIDTH = 480;
 const DEFAULT_WIDTH = 300;

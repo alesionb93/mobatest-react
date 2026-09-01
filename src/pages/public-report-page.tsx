@@ -121,10 +121,8 @@ function PublicReportPage() {
     <div className="min-h-screen bg-background">
       <div className="mx-auto max-w-3xl px-5 py-8">
         <div className="flex items-center gap-2 mb-6">
-          <div className="flex h-6 w-6 items-center justify-center rounded-md bg-primary text-primary-foreground text-xs font-bold">
-            M
-          </div>
-          <span className="font-semibold text-sm text-foreground">Mobatest</span>
+          <img src="/veiser-icon.png" alt="Veiser" className="h-6 w-6 rounded-md object-cover" />
+          <span className="font-semibold text-sm text-foreground">Veiser Test</span>
           <span className="text-xs text-muted-foreground">· relatório público (somente leitura)</span>
         </div>
 
@@ -279,7 +277,7 @@ function ReportContent({ data }: { data: PublicReportData }) {
       </div>
 
       <p className="text-center text-xs text-muted-foreground">
-        Gerado pelo Mobatest — este é um link somente leitura, sem acesso ao restante da conta.
+        Gerado pelo Veiser Test — este é um link somente leitura, sem acesso ao restante da conta.
       </p>
     </div>
   );
