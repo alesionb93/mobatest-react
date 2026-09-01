@@ -49,10 +49,23 @@ if (process.env.MAESTRO_BASE_FOLDER) {
   }
 }
 const PORT = config.port || 4545;
-const ALLOWED_ORIGIN = config.allowedOrigin || 'http://localhost:5173';
+// allowedOrigin pode ser um texto único ("http://localhost:5173") ou uma
+// lista (["https://mobatest.vercel.app", "https://mobatest-stg.vercel.app"])
+// — útil pra liberar produção e homologação ao mesmo tempo.
+const ALLOWED_ORIGINS = Array.isArray(config.allowedOrigin)
+  ? config.allowedOrigin
+  : [config.allowedOrigin || 'http://localhost:5173'];
 
-function setCors(res) {
-  res.setHeader('Access-Control-Allow-Origin', ALLOWED_ORIGIN);
+function setCors(req, res) {
+  const origin = req.headers.origin;
+  // CORS exige devolver exatamente a origem que fez a chamada (não dá pra
+  // simplesmente listar várias no header) — por isso conferimos se ela está
+  // na lista liberada antes de ecoar de volta.
+  if (origin && ALLOWED_ORIGINS.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  } else {
+    res.setHeader('Access-Control-Allow-Origin', ALLOWED_ORIGINS[0]);
+  }
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 }
@@ -201,7 +214,7 @@ function runMaestro(scriptFullPath) {
 }
 
 const server = http.createServer(async (req, res) => {
-  setCors(res);
+  setCors(req, res);
 
   if (req.method === 'OPTIONS') {
     res.writeHead(204);
@@ -261,6 +274,6 @@ server.listen(PORT, '127.0.0.1', () => {
   console.log('\n🟢 Agente do Maestro rodando!');
   console.log(`   Escutando em: http://127.0.0.1:${PORT}`);
   console.log(`   Pasta dos testes: ${config.baseFolder}`);
-  console.log(`   Origem liberada: ${ALLOWED_ORIGIN}`);
+  console.log(`   Origem(ns) liberada(s): ${ALLOWED_ORIGINS.join(', ')}`);
   console.log('\n   Deixe esta janela aberta enquanto usar o botão "Executar automatizado" no Mobatest.\n');
 });
