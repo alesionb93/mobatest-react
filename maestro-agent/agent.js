@@ -18,6 +18,7 @@ const { exec } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const crypto = require('crypto');
 
 const CONFIG_PATH = path.join(__dirname, 'config.json');
 
@@ -158,6 +159,29 @@ function cleanMaestroOutput(raw) {
     .trim();
 }
 
+// Registro de jobs em memória: permite que o navegador CONSULTE o andamento
+// de um teste (GET /jobs/:id) em vez de precisar ficar numa única chamada
+// esperando a resposta. Isso é o que permite reconectar numa execução que já
+// estava rodando, mesmo se a aba do navegador recarregar no meio do caminho
+// — o teste continua rodando aqui no agente de qualquer forma, e a consulta
+// só "olha" o que já está acontecendo.
+const jobs = new Map();
+const JOB_TTL_MS = 30 * 60 * 1000; // limpa jobs terminados depois de 30min
+
+function createJob(scriptPath) {
+  const jobId = crypto.randomUUID();
+  jobs.set(jobId, { status: 'running', scriptPath, startedAt: Date.now(), result: null });
+  return jobId;
+}
+
+function finishJob(jobId, result) {
+  const job = jobs.get(jobId);
+  if (!job) return;
+  job.status = result.status;
+  job.result = result;
+  setTimeout(() => jobs.delete(jobId), JOB_TTL_MS).unref?.();
+}
+
 function runMaestro(scriptFullPath) {
   return new Promise((resolve) => {
     const start = Date.now();
@@ -240,22 +264,44 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (req.method === 'GET' && req.url.startsWith('/jobs/')) {
+    const jobId = req.url.slice('/jobs/'.length);
+    const job = jobs.get(jobId);
+    if (!job) {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, error: 'Job não encontrado — o agente pode ter sido reiniciado.' }));
+      return;
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    if (job.status === 'running') {
+      res.end(JSON.stringify({ ok: true, status: 'running' }));
+    } else {
+      res.end(JSON.stringify({ ok: true, ...job.result }));
+    }
+    return;
+  }
+
   if (req.method === 'POST' && req.url === '/run') {
     let body = '';
     req.on('data', (chunk) => { body += chunk; });
-    req.on('end', async () => {
+    req.on('end', () => {
       try {
         const { scriptPath } = JSON.parse(body);
         if (!scriptPath) throw new Error('Nenhum "scriptPath" informado.');
 
         const fullPath = resolveSafeScriptPath(scriptPath);
-        console.log(`▶ Rodando: ${scriptPath}`);
+        const jobId = createJob(scriptPath);
+        console.log(`▶ Rodando: ${scriptPath} (job ${jobId})`);
 
-        const result = await runMaestro(fullPath);
-        console.log(`${result.status === 'passed' ? '✅' : '❌'} ${scriptPath} — ${result.status} (${result.duration}s)`);
+        // Não espera terminar pra responder — o navegador recebe o jobId na
+        // hora e consulta o andamento depois via GET /jobs/:id.
+        runMaestro(fullPath).then((result) => {
+          console.log(`${result.status === 'passed' ? '✅' : '❌'} ${scriptPath} — ${result.status} (${result.duration}s)`);
+          finishJob(jobId, result);
+        });
 
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ ok: true, ...result }));
+        res.end(JSON.stringify({ ok: true, jobId }));
       } catch (err) {
         console.error(`❌ Erro: ${err.message}`);
         res.writeHead(400, { 'Content-Type': 'application/json' });

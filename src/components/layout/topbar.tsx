@@ -1,9 +1,10 @@
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
-import { Search, ListChecks, Bug, PlayCircle, ChevronDown, Check } from "lucide-react";
+import { Search, ListChecks, Bug, PlayCircle, ChevronDown, Check, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
 import { useProject } from "@/contexts/project-context";
+import { useAutomationJob } from "@/contexts/automation-job-context";
 
 interface SearchResult {
   id: string;
@@ -197,11 +198,33 @@ function ProjectSwitcher() {
   );
 }
 
+function BulkJobIndicator() {
+  const { bulkJob } = useAutomationJob();
+  const navigate = useNavigate();
+
+  if (!bulkJob) return null;
+
+  const done = bulkJob.queue.filter((q) => q.status !== "pending" && q.status !== "running").length;
+  const total = bulkJob.queue.length;
+
+  return (
+    <button
+      onClick={() => navigate(`/test-runs/${bulkJob.runId}`)}
+      className="flex items-center gap-2 rounded-lg border border-brand/30 bg-brand/5 px-3 py-1.5 text-sm font-medium text-brand hover:bg-brand/10"
+      title="Voltar a acompanhar a execução automatizada"
+    >
+      <Loader2 size={14} className="animate-spin" />
+      Automação rodando ({done}/{total})
+    </button>
+  );
+}
+
 function Topbar() {
   return (
     <header className="h-14 border-b border-border bg-background/80 backdrop-blur-md flex items-center gap-4 px-4 sticky top-0 z-30">
       <GlobalSearch />
       <div className="flex-1" />
+      <BulkJobIndicator />
       <ProjectSwitcher />
     </header>
   );

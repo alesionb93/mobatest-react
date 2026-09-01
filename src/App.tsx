@@ -1,6 +1,7 @@
 import { Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/auth-context";
 import { ProjectProvider } from "@/contexts/project-context";
+import { AutomationJobProvider } from "@/contexts/automation-job-context";
 import { ProtectedRoute } from "@/components/protected-route";
 import { AppLayout } from "@/components/layout/app-layout";
 import { RequireProject } from "@/components/require-project";
@@ -26,6 +27,7 @@ import { ProjectsPage } from "@/pages/projects-page";
 function App() {
   return (
     <AuthProvider>
+      <AutomationJobProvider>
       <Routes>
         {/* Rotas públicas, sem exigir login */}
         <Route path="/login" element={<LoginPage />} />
@@ -63,6 +65,7 @@ function App() {
           </Route>
         </Route>
       </Routes>
+      </AutomationJobProvider>
     </AuthProvider>
   );
 }

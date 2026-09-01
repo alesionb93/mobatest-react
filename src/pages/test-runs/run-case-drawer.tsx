@@ -13,6 +13,7 @@ import { statusBadgeVariant, statusLabel } from "@/lib/labels";
 import { formatMMSS } from "@/pages/test-runs/run-helpers";
 import { AddBugModal } from "@/pages/test-runs/add-bug-modal";
 import { MaestroLogView } from "@/pages/test-runs/maestro-log-view";
+import { startMaestroRun, resumeMaestroJob } from "@/lib/maestro-agent";
 import type { TestRunCase, RunCaseResultStatus } from "@/types/test-runs";
 import type { TestSuite } from "@/types/test-cases";
 
@@ -32,8 +33,6 @@ const STATUS_COLORS: Record<RunCaseResultStatus, string> = {
   pre_existing: "border-violet-200 text-violet-700 hover:bg-violet-50 data-[active=true]:bg-violet-500 data-[active=true]:text-white data-[active=true]:border-violet-500",
   untested: "border-border text-muted-foreground",
 };
-
-const MAESTRO_AGENT_URL = "http://127.0.0.1:4545/run";
 
 function ReadonlyBlock({ html, emptyLabel }: { html: string | null | undefined; emptyLabel: string }) {
   const value = (html ?? "").trim();
@@ -169,15 +168,15 @@ function RunCaseDrawer({
     setRunningAutomated(true);
     setShowLog(false);
     try {
-      const res = await fetch(MAESTRO_AGENT_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ scriptPath: tc.automation_script_path }),
-      });
-      const data = await res.json();
+      const started = await startMaestroRun(tc.automation_script_path);
+      if (!started.ok) {
+        toast.error(`Erro ao executar: ${started.error}`);
+        return;
+      }
 
+      const data = await resumeMaestroJob(started.jobId);
       if (!data.ok) {
-        toast.error(`Erro ao executar: ${data.error}`);
+        toast.error(data.error);
         return;
       }
 

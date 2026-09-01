@@ -9,6 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/skeleton";
 import { useAuth } from "@/contexts/auth-context";
 import { useProject } from "@/contexts/project-context";
+import { useAutomationJob } from "@/contexts/automation-job-context";
 import { useRunDetail } from "@/pages/test-runs/use-run-detail";
 import { groupRunCasesBySuite, flattenGroups } from "@/pages/test-runs/run-helpers";
 import { CasesTab } from "@/pages/test-runs/cases-tab";
@@ -45,12 +46,23 @@ function RunDetailPage({ runId }: { runId: string }) {
     updateReportNotes,
   } = useRunDetail(runId);
 
+  const { bulkJob } = useAutomationJob();
   const [tab, setTab] = React.useState("cases");
   const [openRunCaseId, setOpenRunCaseId] = React.useState<string | null>(null);
   const [shareOpen, setShareOpen] = React.useState(false);
   const [exportOpen, setExportOpen] = React.useState(false);
   const [cancelOpen, setCancelOpen] = React.useState(false);
   const [bulkRunCases, setBulkRunCases] = React.useState<TestRunCase[] | null>(null);
+
+  // Havia uma fila de automação rodando pra ESSA execução quando a aba
+  // recarregou sozinha (o Chrome faz isso com abas em segundo plano)? Reabre
+  // o modal automaticamente, já retomando de onde parou.
+  React.useEffect(() => {
+    if (bulkJob && bulkJob.runId === runId && bulkRunCases === null) {
+      setBulkRunCases(bulkJob.queue.map((q) => q.runCase));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bulkJob, runId]);
 
   const groups = React.useMemo(() => groupRunCasesBySuite(runCases, suites), [runCases, suites]);
   const orderedIds = React.useMemo(() => flattenGroups(groups).map((rc) => rc.id), [groups]);
@@ -170,7 +182,9 @@ function RunDetailPage({ runId }: { runId: string }) {
         <BulkRunModal
           open={bulkRunCases !== null}
           onClose={() => setBulkRunCases(null)}
+          runId={runId}
           cases={bulkRunCases}
+          suites={suites}
           onFinished={reload}
         />
       )}
