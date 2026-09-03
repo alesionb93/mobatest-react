@@ -14,7 +14,7 @@
 //      "Executar automatizado" no Veiser Test.
 
 const http = require('http');
-const { exec } = require('child_process');
+const { exec, spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
@@ -182,6 +182,151 @@ function finishJob(jobId, result) {
   setTimeout(() => jobs.delete(jobId), JOB_TTL_MS).unref?.();
 }
 
+
+// ============================================================
+// Espelho do dispositivo (scrcpy), aberto e posicionado do lado do
+// navegador automaticamente — evita ter que abrir/arrastar a janela na mão
+// toda vez. O scrcpy já roda no PC (não no celular); ele só recebe a tela
+// via ADB e mostra numa janela nativa — o agente só decide ONDE essa janela
+// aparece, usando as próprias opções de posição/tamanho do scrcpy.
+let mirrorProcess = null;
+
+// Descobre onde está a janela em primeiro plano (presumivelmente o navegador,
+// já que o QA acabou de clicar no botão nela) usando a API do Windows — assim
+// o scrcpy abre do lado de ONDE o navegador realmente está, e não numa
+// posição fixa que só funciona se o navegador estiver sempre no mesmo monitor.
+function getForegroundWindowRect() {
+  return new Promise((resolve) => {
+    if (process.platform !== 'win32') {
+      resolve(null);
+      return;
+    }
+    const scriptPath = path.join(os.tmpdir(), 'veiser-test-foreground-window.ps1');
+    const script = [
+      'Add-Type @"',
+      'using System;',
+      'using System.Runtime.InteropServices;',
+      'public class VeiserTestWin32 {',
+      '  [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();',
+      '  [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);',
+      '  public struct RECT { public int Left; public int Top; public int Right; public int Bottom; }',
+      '}',
+      '"@',
+      '$hwnd = [VeiserTestWin32]::GetForegroundWindow()',
+      '$rect = New-Object VeiserTestWin32+RECT',
+      '[VeiserTestWin32]::GetWindowRect($hwnd, [ref]$rect) | Out-Null',
+      'Write-Output "$($rect.Left),$($rect.Top),$($rect.Right),$($rect.Bottom)"',
+    ].join('\n');
+    try {
+      fs.writeFileSync(scriptPath, script, 'utf-8');
+    } catch {
+      resolve(null);
+      return;
+    }
+    exec(`powershell -NoProfile -ExecutionPolicy Bypass -File "${scriptPath}"`, { timeout: 5000 }, (err, stdout) => {
+      fs.unlink(scriptPath, () => {});
+      if (err) {
+        resolve(null);
+        return;
+      }
+      const parts = String(stdout).trim().split(',').map(Number);
+      if (parts.length !== 4 || parts.some((n) => Number.isNaN(n))) {
+        resolve(null);
+        return;
+      }
+      const [left, top, right, bottom] = parts;
+      resolve({ left, top, right, bottom });
+    });
+  });
+}
+
+function getScrcpyConfig() {
+  const cfg = config.scrcpy || {};
+  return {
+    command: cfg.path || 'scrcpy',
+    windowTitle: cfg.windowTitle || 'Veiser Test — Espelho do dispositivo',
+    autoPosition: cfg.autoPosition !== false,
+    gap: cfg.gap ?? 12,
+    windowX: cfg.windowX ?? 980,
+    windowY: cfg.windowY ?? 60,
+    windowWidth: cfg.windowWidth ?? 380,
+    windowHeight: cfg.windowHeight ?? 780,
+    alwaysOnTop: cfg.alwaysOnTop !== false,
+    extraArgs: Array.isArray(cfg.extraArgs) ? cfg.extraArgs : [],
+  };
+}
+
+function isMirrorRunning() {
+  return !!mirrorProcess && mirrorProcess.exitCode === null && !mirrorProcess.killed;
+}
+
+async function openMirror(explicitPos) {
+  if (isMirrorRunning()) {
+    return { ok: true, alreadyOpen: true };
+  }
+  const sc = getScrcpyConfig();
+
+  // Prioridade: 1) posição calculada pelo próprio navegador (a mais precisa
+  // que existe, já que ele sabe exatamente onde o modal está na tela);
+  // 2) detecção automática via janela em primeiro plano; 3) posição fixa.
+  let windowX = sc.windowX;
+  let windowY = sc.windowY;
+  if (explicitPos) {
+    windowX = explicitPos.x;
+    windowY = explicitPos.y;
+  } else if (sc.autoPosition) {
+    const rect = await getForegroundWindowRect();
+    if (rect) {
+      windowX = rect.right + sc.gap;
+      windowY = rect.top;
+    }
+  }
+
+  return new Promise((resolve) => {
+    const args = [
+      '--window-title', sc.windowTitle,
+      '--window-x', String(windowX),
+      '--window-y', String(windowY),
+      '--window-width', String(sc.windowWidth),
+      '--window-height', String(sc.windowHeight),
+      ...(sc.alwaysOnTop ? ['--always-on-top'] : []),
+      ...sc.extraArgs,
+    ];
+
+    let settled = false;
+    const child = spawn(sc.command, args, { stdio: 'ignore' });
+    mirrorProcess = child;
+
+    child.on('error', (err) => {
+      if (settled) return;
+      settled = true;
+      mirrorProcess = null;
+      resolve({ ok: false, error: `Não consegui abrir o scrcpy ("${sc.command}"): ${err.message}. Ele está instalado e no PATH?` });
+    });
+
+    // Se o processo não morreu logo de cara, considera que abriu com sucesso
+    // (scrcpy não tem um jeito simples de avisar "pronto" por outro canal).
+    setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      if (isMirrorRunning()) {
+        resolve({ ok: true, alreadyOpen: false });
+      } else {
+        resolve({ ok: false, error: 'O scrcpy fechou logo depois de abrir — confira se o dispositivo está conectado (rode "adb devices" pra checar).' });
+      }
+    }, 1500);
+
+    child.on('exit', () => {
+      if (mirrorProcess === child) mirrorProcess = null;
+    });
+  });
+}
+
+function closeMirror() {
+  if (isMirrorRunning()) mirrorProcess.kill();
+  mirrorProcess = null;
+}
+
 function runMaestro(scriptFullPath) {
   return new Promise((resolve) => {
     const start = Date.now();
@@ -249,6 +394,39 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'GET' && req.url === '/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ ok: true, baseFolder: config.baseFolder }));
+    return;
+  }
+
+  if (req.method === 'POST' && req.url === '/mirror/open') {
+    let body = '';
+    req.on('data', (chunk) => { body += chunk; });
+    req.on('end', async () => {
+      let explicitPos = null;
+      try {
+        const parsed = body ? JSON.parse(body) : {};
+        if (typeof parsed.x === 'number' && typeof parsed.y === 'number') {
+          explicitPos = { x: Math.round(parsed.x), y: Math.round(parsed.y) };
+        }
+      } catch {
+        // corpo inválido/vazio — segue sem posição explícita
+      }
+      const result = await openMirror(explicitPos);
+      res.writeHead(result.ok ? 200 : 500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(result));
+    });
+    return;
+  }
+
+  if (req.method === 'POST' && req.url === '/mirror/close') {
+    closeMirror();
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: true }));
+    return;
+  }
+
+  if (req.method === 'GET' && req.url === '/mirror/status') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: true, open: isMirrorRunning() }));
     return;
   }
 
@@ -322,4 +500,10 @@ server.listen(PORT, '127.0.0.1', () => {
   console.log(`   Pasta dos testes: ${config.baseFolder}`);
   console.log(`   Origem(ns) liberada(s): ${ALLOWED_ORIGINS.join(', ')}`);
   console.log('\n   Deixe esta janela aberta enquanto usar o botão "Executar automatizado" no Veiser Test.\n');
+});
+
+// Fecha a janela do scrcpy junto, se estiver aberta, quando o agente é encerrado
+process.on('SIGINT', () => {
+  closeMirror();
+  process.exit(0);
 });

@@ -10,6 +10,7 @@ import { useProject } from "@/contexts/project-context";
 import { useAutomationJob, type BulkQueueItemPersisted, type PersistedBulkJob } from "@/contexts/automation-job-context";
 import { startMaestroRun, resumeMaestroJob } from "@/lib/maestro-agent";
 import { AddBugModal } from "@/pages/test-runs/add-bug-modal";
+import { DeviceMirrorButton } from "@/pages/test-runs/device-mirror-button";
 import type { TestRunCase } from "@/types/test-runs";
 import type { TestSuite } from "@/types/test-cases";
 
@@ -223,7 +224,7 @@ function BulkRunModal({ open, onClose, runId, cases, suites, onFinished }: BulkR
         open={open}
         onClose={handleCancel}
         title="Executar automatizados"
-        size="lg"
+        size="xl"
         closeOnOutsideClick={false}
         footer={
           finished ? (
@@ -236,13 +237,18 @@ function BulkRunModal({ open, onClose, runId, cases, suites, onFinished }: BulkR
         }
       >
         <div className="flex flex-col gap-4">
-          {!finished && current && (
-            <p className="text-sm text-muted-foreground">
-              Rodando <strong className="text-foreground">{currentIndex + 1}</strong> de{" "}
-              <strong className="text-foreground">{queue.length}</strong>:{" "}
-              <span className="text-foreground font-medium">{labelFor(current)}</span>
-            </p>
-          )}
+          <div className="flex items-center justify-between gap-2">
+            {!finished && current ? (
+              <p className="text-sm text-muted-foreground">
+                Rodando <strong className="text-foreground">{currentIndex + 1}</strong> de{" "}
+                <strong className="text-foreground">{queue.length}</strong>:{" "}
+                <span className="text-foreground font-medium">{labelFor(current)}</span>
+              </p>
+            ) : (
+              <div />
+            )}
+            <DeviceMirrorButton />
+          </div>
           {finished && (
             <p className="text-sm text-foreground">
               Concluído — <strong className="text-emerald-600">{passedCount} passou(aram)</strong>
@@ -256,7 +262,7 @@ function BulkRunModal({ open, onClose, runId, cases, suites, onFinished }: BulkR
           )}
           {cancelled && !finished && <p className="text-sm text-amber-600">Fila cancelada.</p>}
 
-          <div className="flex flex-col gap-1 max-h-80 overflow-y-auto rounded-lg border border-border">
+          <div className="flex flex-col gap-1 max-h-[600px] overflow-y-auto rounded-lg border border-border">
             {queue.map((item, i) => (
               <div
                 key={item.runCase.id}

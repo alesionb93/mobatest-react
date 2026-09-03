@@ -15,6 +15,39 @@ export type MaestroJobPoll =
 const AGENT_UNREACHABLE_MSG =
   "Não consegui conectar ao executor local — ele está rodando? (veja maestro-agent/README.md)";
 
+export async function openDeviceMirror(
+  position?: { x: number; y: number }
+): Promise<{ ok: true; alreadyOpen?: boolean } | { ok: false; error: string }> {
+  try {
+    const res = await fetch(`${AGENT_BASE}/mirror/open`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(position ?? {}),
+    });
+    return await res.json();
+  } catch {
+    return { ok: false, error: AGENT_UNREACHABLE_MSG };
+  }
+}
+
+export async function closeDeviceMirror(): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const res = await fetch(`${AGENT_BASE}/mirror/close`, { method: "POST" });
+    return await res.json();
+  } catch {
+    return { ok: false, error: AGENT_UNREACHABLE_MSG };
+  }
+}
+
+export async function getDeviceMirrorStatus(): Promise<{ ok: true; open: boolean } | { ok: false; error: string }> {
+  try {
+    const res = await fetch(`${AGENT_BASE}/mirror/status`);
+    return await res.json();
+  } catch {
+    return { ok: false, error: AGENT_UNREACHABLE_MSG };
+  }
+}
+
 export async function startMaestroRun(
   scriptPath: string
 ): Promise<{ ok: true; jobId: string } | { ok: false; error: string }> {

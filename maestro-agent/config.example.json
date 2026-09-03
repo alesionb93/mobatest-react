@@ -2,5 +2,16 @@
   "baseFolder": "C:\\caminho\\para\\sua\\pasta\\de\\testes\\maestro",
   "port": 4545,
   "allowedOrigin": "http://localhost:5173",
-  "timeoutMs": 600000
+  "timeoutMs": 600000,
+  "scrcpy": {
+    "path": "scrcpy",
+    "windowTitle": "Veiser Test — Espelho do dispositivo",
+    "autoPosition": true,
+    "gap": 12,
+    "windowX": 980,
+    "windowY": 60,
+    "windowWidth": 380,
+    "windowHeight": 780,
+    "alwaysOnTop": true
+  }
 }

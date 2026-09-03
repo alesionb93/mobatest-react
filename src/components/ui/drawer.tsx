@@ -29,6 +29,7 @@ function Drawer({ open, onClose, title, subtitle, width = "md", headerActions, f
       if (e.target === e.currentTarget) onClose();
     }}>
       <div
+        role="dialog"
         className={cn(
           "h-full w-full bg-card border-l border-border shadow-xl flex flex-col",
           width === "lg" ? "max-w-2xl" : "max-w-lg"

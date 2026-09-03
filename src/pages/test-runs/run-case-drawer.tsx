@@ -13,6 +13,7 @@ import { statusBadgeVariant, statusLabel } from "@/lib/labels";
 import { formatMMSS } from "@/pages/test-runs/run-helpers";
 import { AddBugModal } from "@/pages/test-runs/add-bug-modal";
 import { MaestroLogView } from "@/pages/test-runs/maestro-log-view";
+import { DeviceMirrorButton } from "@/pages/test-runs/device-mirror-button";
 import { startMaestroRun, resumeMaestroJob } from "@/lib/maestro-agent";
 import type { TestRunCase, RunCaseResultStatus } from "@/types/test-runs";
 import type { TestSuite } from "@/types/test-cases";
@@ -262,14 +263,17 @@ function RunCaseDrawer({
 
                 {tc.automation_status === "automated" && tc.automation_script_path && (
                   <div className="flex flex-col gap-1 pt-1">
-                    <button
-                      onClick={handleRunAutomated}
-                      disabled={runningAutomated}
-                      className="flex items-center justify-center gap-2 rounded-lg border border-brand/30 bg-brand/5 px-3 py-2 text-sm font-medium text-brand hover:bg-brand/10 disabled:opacity-60 w-fit"
-                    >
-                      {runningAutomated ? <Loader2 size={15} className="animate-spin" /> : <Play size={15} />}
-                      {runningAutomated ? "Executando..." : "Executar automatizado"}
-                    </button>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        onClick={handleRunAutomated}
+                        disabled={runningAutomated}
+                        className="flex items-center justify-center gap-2 rounded-lg border border-brand/30 bg-brand/5 px-3 py-2 text-sm font-medium text-brand hover:bg-brand/10 disabled:opacity-60 w-fit"
+                      >
+                        {runningAutomated ? <Loader2 size={15} className="animate-spin" /> : <Play size={15} />}
+                        {runningAutomated ? "Executando..." : "Executar automatizado"}
+                      </button>
+                      <DeviceMirrorButton />
+                    </div>
                     <span className="font-mono-table text-xs text-muted-foreground">
                       {tc.automation_script_path}
                     </span>
