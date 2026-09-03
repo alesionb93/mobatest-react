@@ -7,13 +7,24 @@ export interface DrawerProps {
   onClose: () => void;
   title: React.ReactNode;
   subtitle?: React.ReactNode;
-  width?: "md" | "lg";
+  width?: "md" | "lg" | "xl";
+  closeOnOutsideClick?: boolean;
   headerActions?: React.ReactNode;
   footer?: React.ReactNode;
   children: React.ReactNode;
 }
 
-function Drawer({ open, onClose, title, subtitle, width = "md", headerActions, footer, children }: DrawerProps) {
+function Drawer({
+  open,
+  onClose,
+  title,
+  subtitle,
+  width = "md",
+  closeOnOutsideClick = true,
+  headerActions,
+  footer,
+  children,
+}: DrawerProps) {
   React.useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if (e.key === "Escape") onClose();
@@ -25,14 +36,17 @@ function Drawer({ open, onClose, title, subtitle, width = "md", headerActions, f
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-40 flex justify-end bg-black/50 backdrop-blur-sm" onMouseDown={(e) => {
-      if (e.target === e.currentTarget) onClose();
-    }}>
+    <div
+      className="fixed inset-0 z-40 flex justify-end bg-black/50 backdrop-blur-sm"
+      onMouseDown={(e) => {
+        if (closeOnOutsideClick && e.target === e.currentTarget) onClose();
+      }}
+    >
       <div
         role="dialog"
         className={cn(
           "h-full w-full bg-card border-l border-border shadow-xl flex flex-col",
-          width === "lg" ? "max-w-2xl" : "max-w-lg"
+          width === "lg" ? "max-w-2xl" : width === "xl" ? "max-w-4xl" : "max-w-lg"
         )}
       >
         <div className="flex items-start justify-between gap-3 border-b border-border px-5 py-4">

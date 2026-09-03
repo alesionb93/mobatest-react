@@ -2,7 +2,7 @@ import * as React from "react";
 import { toast } from "sonner";
 import { CheckCircle2, XCircle, Loader2, Circle } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Modal } from "@/components/ui/modal";
+import { Drawer } from "@/components/ui/drawer";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/contexts/auth-context";
@@ -220,12 +220,32 @@ function BulkRunModal({ open, onClose, runId, cases, suites, onFinished }: BulkR
 
   return (
     <>
-      <Modal
+      <Drawer
         open={open}
         onClose={handleCancel}
-        title="Executar automatizados"
-        size="xl"
+        width="xl"
         closeOnOutsideClick={false}
+        title="Executar automatizados"
+        subtitle={
+          !finished && current ? (
+            <>
+              Rodando <strong className="text-foreground">{currentIndex + 1}</strong> de{" "}
+              <strong className="text-foreground">{queue.length}</strong>:{" "}
+              <span className="text-foreground font-medium">{labelFor(current)}</span>
+            </>
+          ) : finished ? (
+            <>
+              Concluído — <strong className="text-emerald-600">{passedCount} passou(aram)</strong>
+              {failedCount > 0 && (
+                <>
+                  , <strong className="text-red-600">{failedCount} falhou(aram)</strong>
+                </>
+              )}
+              .
+            </>
+          ) : undefined
+        }
+        headerActions={<DeviceMirrorButton />}
         footer={
           finished ? (
             <Button onClick={onClose}>Fechar</Button>
@@ -237,32 +257,9 @@ function BulkRunModal({ open, onClose, runId, cases, suites, onFinished }: BulkR
         }
       >
         <div className="flex flex-col gap-4">
-          <div className="flex items-center justify-between gap-2">
-            {!finished && current ? (
-              <p className="text-sm text-muted-foreground">
-                Rodando <strong className="text-foreground">{currentIndex + 1}</strong> de{" "}
-                <strong className="text-foreground">{queue.length}</strong>:{" "}
-                <span className="text-foreground font-medium">{labelFor(current)}</span>
-              </p>
-            ) : (
-              <div />
-            )}
-            <DeviceMirrorButton />
-          </div>
-          {finished && (
-            <p className="text-sm text-foreground">
-              Concluído — <strong className="text-emerald-600">{passedCount} passou(aram)</strong>
-              {failedCount > 0 && (
-                <>
-                  , <strong className="text-red-600">{failedCount} falhou(aram)</strong>
-                </>
-              )}
-              .
-            </p>
-          )}
           {cancelled && !finished && <p className="text-sm text-amber-600">Fila cancelada.</p>}
 
-          <div className="flex flex-col gap-1 max-h-[600px] overflow-y-auto rounded-lg border border-border">
+          <div className="flex flex-col gap-1 rounded-lg border border-border">
             {queue.map((item, i) => (
               <div
                 key={item.runCase.id}
@@ -285,7 +282,7 @@ function BulkRunModal({ open, onClose, runId, cases, suites, onFinished }: BulkR
             ))}
           </div>
         </div>
-      </Modal>
+      </Drawer>
 
       {current && (
         <AddBugModal
