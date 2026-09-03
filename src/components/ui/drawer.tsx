@@ -50,7 +50,7 @@ function Drawer({
         )}
       >
         <div className="flex items-start justify-between gap-3 border-b border-border px-5 py-4">
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <h2 className="text-lg font-semibold text-foreground truncate">{title}</h2>
             {subtitle && <div className="mt-0.5 text-sm text-muted-foreground">{subtitle}</div>}
           </div>
