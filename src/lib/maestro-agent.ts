@@ -1,7 +1,7 @@
 const AGENT_BASE = "http://127.0.0.1:4545";
 
 export interface MaestroJobResult {
-  status: "passed" | "failed";
+  status: "passed" | "failed" | "cancelled";
   duration: number;
   output: string;
   screenshotBase64: string | null;
@@ -69,6 +69,21 @@ export async function pollMaestroJob(jobId: string): Promise<MaestroJobPoll> {
     return await res.json();
   } catch {
     return { ok: false, error: AGENT_UNREACHABLE_MSG };
+  }
+}
+
+/**
+ * Pede pro agente matar de verdade o teste em andamento (a árvore de
+ * processos inteira, não só um sinal educado) — sem isso, cancelar na tela
+ * só para o navegador de acompanhar, mas o Maestro continua controlando o
+ * celular sozinho até terminar.
+ */
+export async function cancelMaestroJob(jobId: string): Promise<{ ok: boolean }> {
+  try {
+    const res = await fetch(`${AGENT_BASE}/jobs/${jobId}/cancel`, { method: "POST" });
+    return await res.json();
+  } catch {
+    return { ok: false };
   }
 }
 

@@ -170,16 +170,35 @@ const JOB_TTL_MS = 30 * 60 * 1000; // limpa jobs terminados depois de 30min
 
 function createJob(scriptPath) {
   const jobId = crypto.randomUUID();
-  jobs.set(jobId, { status: 'running', scriptPath, startedAt: Date.now(), result: null });
+  jobs.set(jobId, { status: 'running', scriptPath, startedAt: Date.now(), result: null, process: null });
   return jobId;
 }
 
 function finishJob(jobId, result) {
   const job = jobs.get(jobId);
   if (!job) return;
+  // Se já foi cancelado explicitamente, não deixa um resultado tardio
+  // (o processo ainda terminando de morrer) sobrescrever isso.
+  if (job.status === 'cancelled') return;
   job.status = result.status;
   job.result = result;
   setTimeout(() => jobs.delete(jobId), JOB_TTL_MS).unref?.();
+}
+
+// No Windows, o comando roda dentro de um cmd.exe (por causa do chcp) — matar
+// só esse processo não mata o Java/Maestro que ele abriu por baixo. "taskkill
+// /T" mata a árvore inteira de processos, de verdade.
+function killProcessTree(child) {
+  if (!child || !child.pid) return;
+  if (process.platform === 'win32') {
+    exec(`taskkill /pid ${child.pid} /T /F`, () => {});
+  } else {
+    try {
+      child.kill('SIGKILL');
+    } catch {
+      // já deve ter morrido sozinho
+    }
+  }
 }
 
 
@@ -327,7 +346,7 @@ function closeMirror() {
   mirrorProcess = null;
 }
 
-function runMaestro(scriptFullPath) {
+function runMaestro(scriptFullPath, onChildStarted) {
   return new Promise((resolve) => {
     const start = Date.now();
     // Pasta temporária só pra essa rodada — pede pro próprio Maestro salvar
@@ -346,7 +365,7 @@ function runMaestro(scriptFullPath) {
     const chcpPrefix = process.platform === 'win32' ? 'chcp 65001 >NUL && ' : '';
     const command = `${chcpPrefix}maestro test --debug-output "${debugDir}" "${scriptFullPath}"`;
 
-    exec(
+    const child = exec(
       command,
       { timeout: config.timeoutMs || 10 * 60 * 1000, maxBuffer: 20 * 1024 * 1024, cwd: config.baseFolder },
       (error, stdout, stderr) => {
@@ -379,6 +398,7 @@ function runMaestro(scriptFullPath) {
         resolve({ status, duration, output: cleanMaestroOutput(output), screenshotBase64 });
       }
     );
+    onChildStarted?.(child);
   });
 }
 
@@ -459,6 +479,30 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (req.method === 'POST' && req.url.startsWith('/jobs/') && req.url.endsWith('/cancel')) {
+    const jobId = req.url.slice('/jobs/'.length, -'/cancel'.length);
+    const job = jobs.get(jobId);
+    if (!job) {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, error: 'Job não encontrado — o agente pode ter sido reiniciado.' }));
+      return;
+    }
+    if (job.status === 'running') {
+      console.log(`⛔ Cancelando: ${job.scriptPath} (job ${jobId})`);
+      killProcessTree(job.process);
+      job.status = 'cancelled';
+      job.result = {
+        status: 'cancelled',
+        duration: Math.round((Date.now() - job.startedAt) / 1000),
+        output: 'Execução cancelada pelo usuário.',
+        screenshotBase64: null,
+      };
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: true }));
+    return;
+  }
+
   if (req.method === 'POST' && req.url === '/run') {
     let body = '';
     req.on('data', (chunk) => { body += chunk; });
@@ -473,7 +517,10 @@ const server = http.createServer(async (req, res) => {
 
         // Não espera terminar pra responder — o navegador recebe o jobId na
         // hora e consulta o andamento depois via GET /jobs/:id.
-        runMaestro(fullPath).then((result) => {
+        runMaestro(fullPath, (child) => {
+          const job = jobs.get(jobId);
+          if (job) job.process = child;
+        }).then((result) => {
           console.log(`${result.status === 'passed' ? '✅' : '❌'} ${scriptPath} — ${result.status} (${result.duration}s)`);
           finishJob(jobId, result);
         });

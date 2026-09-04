@@ -56,6 +56,49 @@ digitar manualmente clicando em "Digitar manualmente".
 Por padrão ele procura dentro de uma subpasta chamada `flows` (se existir).
 Pra mudar isso, adicione `"scriptsRoot": "outra-pasta"` no seu `config.json`.
 
+## Espelho do dispositivo (scrcpy) já posicionado
+
+Se você usa o [scrcpy](https://github.com/Genymobile/scrcpy) pra ver a tela
+do celular enquanto testa, o botão **"Abrir espelho do dispositivo"** (ao
+lado de "Executar automatizado", e também dentro do modal de execução em
+lote) já abre a janela dele **posicionada do lado do navegador**, sem
+precisar arrastar na mão.
+
+**Pré-requisitos:**
+- Ter o `scrcpy` instalado e no PATH (`scrcpy --version` precisa funcionar
+  no terminal). Se preferir, aponte o caminho completo em
+  `"scrcpy": { "path": "C:\\caminho\\scrcpy.exe" }` no `config.json`.
+- Dispositivo já conectado (`adb devices` mostrando ele).
+
+**Posição da janela:** por padrão, o agente detecta automaticamente onde
+está a janela do navegador (a que você clicou o botão) e abre o scrcpy
+logo do lado dela — funciona mesmo com vários monitores, sem precisar
+calibrar números manualmente. Isso só funciona no Windows.
+
+Se quiser desligar essa detecção automática e usar sempre uma posição fixa,
+coloque `"autoPosition": false` no bloco `"scrcpy"` do seu `config.json` —
+aí sim `windowX`/`windowY` (posição) e `windowWidth`/`windowHeight`
+(tamanho) valem como estão. Com a detecção automática ligada, apenas o
+tamanho (`windowWidth`/`windowHeight`) e o espaçamento (`gap`, em pixels)
+são usados.
+
+**Ajustar a posição/tamanho da janela:** edite o bloco `"scrcpy"` no seu
+`config.json` — `windowX`/`windowY` é a posição na tela (em pixels, a
+partir do canto superior esquerdo do seu monitor) e `windowWidth`/
+`windowHeight` é o tamanho. Os valores padrão assumem uma tela larga com o
+navegador ocupando a esquerda — ajuste conforme sua resolução e onde a
+janela do navegador fica.
+
+**Quer descobrir os números certos na prática?** Deixe o espelho aberto do
+tamanho/posição que você gosta (redimensione/arraste na mão), depois rode:
+
+```
+powershell -ExecutionPolicy Bypass -File get-mirror-size.ps1
+```
+
+Ele lê a janela aberta e já te devolve os valores prontos pra colar no
+`config.json`.
+
 ## Teste demorando demais / travando
 
 Por padrão, o agente espera até **10 minutos** por teste antes de desistir e

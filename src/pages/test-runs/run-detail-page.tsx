@@ -65,7 +65,10 @@ function RunDetailPage({ runId }: { runId: string }) {
   }, [bulkJob, runId]);
 
   const groups = React.useMemo(() => groupRunCasesBySuite(runCases, suites), [runCases, suites]);
-  const orderedIds = React.useMemo(() => flattenGroups(groups).map((rc) => rc.id), [groups]);
+  const orderedCases = React.useMemo(
+    () => flattenGroups(groups).map((rc) => ({ id: rc.id, status: rc.status })),
+    [groups]
+  );
 
   const defectsWithCaseTitle = React.useMemo(
     () =>
@@ -161,7 +164,7 @@ function RunDetailPage({ runId }: { runId: string }) {
         open={openRunCaseId !== null}
         onClose={() => setOpenRunCaseId(null)}
         runCaseId={openRunCaseId}
-        orderedIds={orderedIds}
+        orderedCases={orderedCases}
         suites={suites}
         projectCode={activeProject?.code ?? ""}
         onAdvance={(nextId) => {
@@ -169,7 +172,7 @@ function RunDetailPage({ runId }: { runId: string }) {
             setOpenRunCaseId(nextId);
           } else {
             setOpenRunCaseId(null);
-            toast.success("Você chegou ao último caso desta execução!");
+            toast.success("Não há mais casos pendentes nesta execução!");
           }
         }}
         onStatusApplied={async () => {

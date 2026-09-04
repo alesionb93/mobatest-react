@@ -4,11 +4,11 @@ import { CheckCircle2, XCircle, Loader2, Circle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Drawer } from "@/components/ui/drawer";
 import { Button } from "@/components/ui/button";
-import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/contexts/auth-context";
 import { useProject } from "@/contexts/project-context";
 import { useAutomationJob, type BulkQueueItemPersisted, type PersistedBulkJob } from "@/contexts/automation-job-context";
-import { startMaestroRun, resumeMaestroJob } from "@/lib/maestro-agent";
+import { startMaestroRun, resumeMaestroJob, cancelMaestroJob } from "@/lib/maestro-agent";
+import { updateRunCaseStatus } from "@/lib/run-case-status";
 import { AddBugModal } from "@/pages/test-runs/add-bug-modal";
 import { DeviceMirrorButton } from "@/pages/test-runs/device-mirror-button";
 import type { TestRunCase } from "@/types/test-runs";
@@ -40,6 +40,8 @@ function BulkRunModal({ open, onClose, runId, cases, suites, onFinished }: BulkR
   const runningRef = React.useRef(false);
   const queueRef = React.useRef<BulkQueueItemPersisted[]>([]);
   const currentIndexRef = React.useRef(0);
+  const activeJobIdRef = React.useRef<string | null>(null);
+  const cancelledRef = React.useRef(false);
 
   const suiteTitleById = React.useMemo(() => {
     const map: Record<string, string> = {};
@@ -78,6 +80,7 @@ function BulkRunModal({ open, onClose, runId, cases, suites, onFinished }: BulkR
   React.useEffect(() => {
     if (!open) return;
     setCancelled(false);
+    cancelledRef.current = false;
     setBugModalOpen(false);
     runningRef.current = false;
 
@@ -115,6 +118,7 @@ function BulkRunModal({ open, onClose, runId, cases, suites, onFinished }: BulkR
 
   async function reconnectToJob(jobId: string) {
     runningRef.current = true;
+    activeJobIdRef.current = jobId;
     const result = await resumeMaestroJob(jobId);
     await handleJobResult(result);
   }
@@ -134,12 +138,19 @@ function BulkRunModal({ open, onClose, runId, cases, suites, onFinished }: BulkR
       return;
     }
 
+    activeJobIdRef.current = started.jobId;
     patchCurrent({}, started.jobId);
     const result = await resumeMaestroJob(started.jobId);
     await handleJobResult(result);
   }
 
   async function handleJobResult(result: Awaited<ReturnType<typeof resumeMaestroJob>>) {
+    activeJobIdRef.current = null;
+    // A fila já foi cancelada enquanto esse teste rodava — o processo já foi
+    // morto no agente, e a tela já foi fechada; não faz sentido gravar nada
+    // nem avançar pra um próximo teste que o usuário já disse que não quer.
+    if (cancelledRef.current) return;
+
     const item = queueRef.current[currentIndexRef.current];
 
     if (!result.ok) {
@@ -155,16 +166,22 @@ function BulkRunModal({ open, onClose, runId, cases, suites, onFinished }: BulkR
       null
     );
 
+    if (result.status === "cancelled") {
+      runningRef.current = false;
+      return;
+    }
+
     if (result.status === "passed") {
-      await supabase
-        .from("test_run_cases")
-        .update({
+      await updateRunCaseStatus(
+        item.runCase.id,
+        {
           status: "passed",
           executed_at: new Date().toISOString(),
           executed_by: user?.id,
           duration_seconds: result.duration,
-        })
-        .eq("id", item.runCase.id);
+        },
+        "automated"
+      );
       runningRef.current = false;
       advanceIndex();
     } else {
@@ -182,16 +199,17 @@ function BulkRunModal({ open, onClose, runId, cases, suites, onFinished }: BulkR
 
   async function handleBugDone(extra: Record<string, unknown>) {
     const item = queueRef.current[currentIndexRef.current];
-    await supabase
-      .from("test_run_cases")
-      .update({
+    await updateRunCaseStatus(
+      item.runCase.id,
+      {
         status: "failed",
         executed_at: new Date().toISOString(),
         executed_by: user?.id,
-        duration_seconds: item.duration,
+        duration_seconds: item.duration ?? undefined,
         ...extra,
-      })
-      .eq("id", item.runCase.id);
+      },
+      "automated"
+    );
     setBugModalOpen(false);
     runningRef.current = false;
     advanceIndex();
@@ -203,7 +221,13 @@ function BulkRunModal({ open, onClose, runId, cases, suites, onFinished }: BulkR
   }
 
   function handleCancel() {
+    cancelledRef.current = true;
     setCancelled(true);
+    if (activeJobIdRef.current) {
+      // Fogo e esquece — não precisa esperar a resposta pra fechar a tela,
+      // mas isso É o que garante que o teste pare de rodar de verdade.
+      void cancelMaestroJob(activeJobIdRef.current);
+    }
     saveBulkJob(null);
     onClose();
   }
@@ -274,6 +298,7 @@ function BulkRunModal({ open, onClose, runId, cases, suites, onFinished }: BulkR
                 {(item.status === "failed" || item.status === "error") && (
                   <XCircle size={15} className="text-red-600 shrink-0" />
                 )}
+                {item.status === "cancelled" && <XCircle size={15} className="text-amber-600 shrink-0" />}
                 <span className="truncate flex-1">{labelFor(item)}</span>
                 {item.duration !== undefined && (
                   <span className="font-mono-table text-xs text-muted-foreground shrink-0">{item.duration}s</span>

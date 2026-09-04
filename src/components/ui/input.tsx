@@ -52,15 +52,17 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
 Input.displayName = "Input";
 
 const PasswordInput = React.forwardRef<HTMLInputElement, Omit<InputProps, "type" | "rightElement">>(
-  (props, ref) => {
+  ({ id, ...props }, ref) => {
     const [visible, setVisible] = React.useState(false);
     return (
       <Input
         ref={ref}
+        id={id}
         type={visible ? "text" : "password"}
         rightElement={
           <button
             type="button"
+            id={id ? `${id}-toggle` : undefined}
             tabIndex={-1}
             onClick={() => setVisible((v) => !v)}
             className="text-muted-foreground hover:text-foreground"

@@ -191,7 +191,17 @@ function CasesTab({
                         {profileName(rc.assignee_id, profiles, currentUserId)}
                       </TableCell>
                       <TableCell>
-                        <Badge variant={statusBadgeVariant(rc.status)}>{statusLabel(rc.status)}</Badge>
+                        <div className="flex items-center gap-1.5">
+                          <Badge variant={statusBadgeVariant(rc.status)}>{statusLabel(rc.status)}</Badge>
+                          {rc.retest_count > 0 && (
+                            <span
+                              className="text-xs font-medium text-muted-foreground"
+                              title={`Retestado ${rc.retest_count} vez(es) nesta execução`}
+                            >
+                              +{rc.retest_count}
+                            </span>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell className="font-medium">{rc.test_cases.title}</TableCell>
                       <TableCell className="font-mono-table text-xs text-muted-foreground">

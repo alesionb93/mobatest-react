@@ -36,7 +36,7 @@ function LoginPage() {
       footer={
         <>
           Não tem conta?{" "}
-          <Link to="/signup" className="text-brand font-medium hover:underline">
+          <Link id="link-criar-conta" to="/signup" className="text-brand font-medium hover:underline">
             Criar conta
           </Link>
         </>
@@ -44,6 +44,7 @@ function LoginPage() {
     >
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <Input
+          id="input-email"
           label="E-mail"
           type="email"
           autoComplete="email"
@@ -55,6 +56,7 @@ function LoginPage() {
         />
         <div className="flex flex-col gap-1.5">
           <PasswordInput
+            id="input-senha"
             label="Senha"
             autoComplete="current-password"
             required
@@ -62,7 +64,7 @@ function LoginPage() {
             onChange={(e) => setPassword(e.target.value)}
             placeholder="••••••••"
           />
-          <Link to="/forgot-password" className="self-end text-xs text-brand hover:underline">
+          <Link id="link-esqueceu-senha" to="/forgot-password" className="self-end text-xs text-brand hover:underline">
             Esqueceu a senha?
           </Link>
         </div>
@@ -71,7 +73,7 @@ function LoginPage() {
             {error}
           </p>
         )}
-        <Button type="submit" disabled={submitting} className="w-full">
+        <Button id="btn-entrar" type="submit" disabled={submitting} className="w-full">
           {submitting ? "Entrando..." : "Entrar"}
         </Button>
       </form>

@@ -1,7 +1,7 @@
 import * as React from "react";
 import type { TestRunCase } from "@/types/test-runs";
 
-export type BulkItemStatus = "pending" | "running" | "passed" | "failed" | "error";
+export type BulkItemStatus = "pending" | "running" | "passed" | "failed" | "error" | "cancelled";
 
 export interface BulkQueueItemPersisted {
   runCase: TestRunCase;
