@@ -13,6 +13,7 @@ import { useAutomationJob } from "@/contexts/automation-job-context";
 import { useRunDetail } from "@/pages/test-runs/use-run-detail";
 import { groupRunCasesBySuite, flattenGroups } from "@/pages/test-runs/run-helpers";
 import { CasesTab } from "@/pages/test-runs/cases-tab";
+import { AutomatedFailuresTab } from "@/pages/test-runs/automated-failures-tab";
 import { DefectsTab, TeamTab } from "@/pages/test-runs/defects-and-team-tabs";
 import { RunDetailSidebar } from "@/pages/test-runs/run-detail-sidebar";
 import { RunCaseDrawer } from "@/pages/test-runs/run-case-drawer";
@@ -97,6 +98,7 @@ function RunDetailPage({ runId }: { runId: string }) {
   const TABS = [
     { key: "cases", label: "Casos de teste" },
     { key: "defects", label: `Defeitos${defects.length ? ` (${defects.length})` : ""}` },
+    { key: "failures", label: "Falhas automatizadas" },
     { key: "team", label: "Estatísticas da equipe" },
   ];
 
@@ -144,6 +146,7 @@ function RunDetailPage({ runId }: { runId: string }) {
               />
             ))}
           {tab === "defects" && <DefectsTab defects={defectsWithCaseTitle} projectCode={activeProject?.code ?? ""} />}
+          {tab === "failures" && <AutomatedFailuresTab runId={runId} />}
           {tab === "team" && <TeamTab runCases={runCases} profiles={profiles} currentUserId={user?.id} />}
         </div>
 

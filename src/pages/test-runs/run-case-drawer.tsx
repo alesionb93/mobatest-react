@@ -9,6 +9,7 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@
 import { EmptyState } from "@/components/ui/skeleton";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/contexts/auth-context";
+import { useProject } from "@/contexts/project-context";
 import { statusBadgeVariant, statusLabel } from "@/lib/labels";
 import { formatMMSS } from "@/pages/test-runs/run-helpers";
 import { AddBugModal } from "@/pages/test-runs/add-bug-modal";
@@ -16,6 +17,7 @@ import { MaestroLogView } from "@/pages/test-runs/maestro-log-view";
 import { DeviceMirrorButton } from "@/pages/test-runs/device-mirror-button";
 import { startMaestroRun, resumeMaestroJob, cancelMaestroJob } from "@/lib/maestro-agent";
 import { updateRunCaseStatus } from "@/lib/run-case-status";
+import { recordAutomatedFailure } from "@/lib/automated-failures";
 import type { TestRunCase, RunCaseResultStatus, RunCaseAttempt } from "@/types/test-runs";
 import type { TestSuite } from "@/types/test-cases";
 
@@ -69,6 +71,7 @@ function RunCaseDrawer({
   onStatusApplied,
 }: RunCaseDrawerProps) {
   const { user } = useAuth();
+  const { activeProject } = useProject();
   const [tab, setTab] = React.useState("execution");
   const [rc, setRc] = React.useState<TestRunCase | null>(null);
   const [history, setHistory] = React.useState<
@@ -89,7 +92,6 @@ function RunCaseDrawer({
   const [retestMode, setRetestMode] = React.useState(false);
   const openedAtRef = React.useRef(Date.now());
   const activeJobIdRef = React.useRef<string | null>(null);
-  const bugSourceRef = React.useRef<"manual" | "automated">("manual");
 
   React.useEffect(() => {
     if (!open || !runCaseId) return;
@@ -201,7 +203,6 @@ function RunCaseDrawer({
 
   function handleStatusClick(status: RunCaseResultStatus) {
     if (status === "failed") {
-      bugSourceRef.current = "manual";
       setLastAutomatedRun(null);
       setBugModalKey((k) => k + 1);
       setAddBugOpen(true);
@@ -241,11 +242,32 @@ function RunCaseDrawer({
       });
 
       if (data.status === "failed") {
-        // Mesmo comportamento já existente ao clicar manualmente em "Falhou":
-        // abre o formulário de criar defeito — já vem preenchido com o log.
-        bugSourceRef.current = "automated";
-        setBugModalKey((k) => k + 1);
-        setAddBugOpen(true);
+        // Não abre mais o modal de bug direto — cria um registro de falha
+        // (log + print + duração) pra alguém revisar com calma depois, na
+        // aba "Falhas automatizadas". Nem toda falha é um bug de verdade.
+        await updateRunCaseStatus(
+          rc!.id,
+          {
+            status: "failed",
+            executed_at: new Date().toISOString(),
+            executed_by: user!.id,
+            duration_seconds: data.duration,
+          },
+          "automated"
+        );
+        if (activeProject) {
+          await recordAutomatedFailure({
+            runCaseId: rc!.id,
+            projectId: activeProject.id,
+            testCaseTitle: tc?.title ?? "",
+            durationSeconds: data.duration,
+            output: data.output ?? "",
+            screenshotBase64: data.screenshotBase64 ?? null,
+            userId: user?.id,
+          });
+        }
+        toast.info('Falha registrada — revise em "Falhas automatizadas".');
+        await onStatusApplied();
       } else {
         await applyStatus("passed", { duration_seconds: data.duration }, "automated");
       }
@@ -514,7 +536,7 @@ function RunCaseDrawer({
             automatedScreenshotBase64={lastAutomatedRun?.status === "failed" ? lastAutomatedRun.screenshotBase64 : undefined}
             onDone={async (extra) => {
               setAddBugOpen(false);
-              await applyStatus("failed", extra, bugSourceRef.current);
+              await applyStatus("failed", extra, "manual");
             }}
           />
         </>

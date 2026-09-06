@@ -35,6 +35,8 @@ interface AddBugModalProps {
   /** Preenchidos só quando o bug vem de uma falha do "Executar automatizado" */
   automatedLog?: string;
   automatedScreenshotBase64?: string | null;
+  /** Opcional: avisa qual defeito foi criado (ou vinculado, se já existente) */
+  onDefectCreated?: (defectId: string) => void;
 }
 
 function escapeHtml(s: string) {
@@ -53,10 +55,17 @@ function buildAutomatedCard(log: string, hasScreenshot: boolean) {
 
   let problemHtml: string;
   if (parsed.steps.length === 0) {
-    // Não reconheceu o formato — cai pro log cru mesmo, sem quebrar nada.
     const trimmed = log.trim();
     const kept = trimmed.length > 6000 ? trimmed.slice(-6000) : trimmed;
-    problemHtml = kept ? `<pre>${escapeHtml(kept)}</pre>` : "<p><br></p>";
+    if (parsed.globalFailure) {
+      problemHtml =
+        `<p><strong>${escapeHtml(parsed.globalFailure.title)}</strong></p>` +
+        `<p>${escapeHtml(parsed.globalFailure.body)}</p>` +
+        (kept ? `<details><summary>Ver log técnico completo</summary><pre>${escapeHtml(kept)}</pre></details>` : "");
+    } else {
+      // Não reconheceu o formato — cai pro log cru mesmo, sem quebrar nada.
+      problemHtml = kept ? `<pre>${escapeHtml(kept)}</pre>` : "<p><br></p>";
+    }
   } else {
     const meta =
       parsed.flow || parsed.device
@@ -65,7 +74,12 @@ function buildAutomatedCard(log: string, hasScreenshot: boolean) {
     const stepsHtml = parsed.steps
       .map((s) => {
         const icon = s.status === "passed" ? "✅" : "❌";
-        const detail = s.detail ? `<br><span style="color:#b91c1c;">${escapeHtml(s.detail)}</span>` : "";
+        let detail = "";
+        if (s.friendlyReason) {
+          detail = `<br><span style="color:#b91c1c;"><strong>${escapeHtml(s.friendlyReason.title)}</strong><br>${escapeHtml(s.friendlyReason.body)}</span>`;
+        } else if (s.detail) {
+          detail = `<br><span style="color:#b91c1c;">${escapeHtml(s.detail)}</span>`;
+        }
         return `<li>${icon} ${escapeHtml(s.label)}${detail}</li>`;
       })
       .join("");
@@ -89,7 +103,7 @@ function buildAutomatedCard(log: string, hasScreenshot: boolean) {
   );
 }
 
-function AddBugModal({ open, onClose, runCase, onDone, automatedLog, automatedScreenshotBase64 }: AddBugModalProps) {
+function AddBugModal({ open, onClose, runCase, onDone, automatedLog, automatedScreenshotBase64, onDefectCreated }: AddBugModalProps) {
   const { user } = useAuth();
   const { activeProject } = useProject();
   const [source, setSource] = React.useState<"new" | "existing">("new");
@@ -166,6 +180,7 @@ function AddBugModal({ open, onClose, runCase, onDone, automatedLog, automatedSc
       const chosen = existingDefects.find((d) => d.id === existingDefectId);
       setSaving(true);
       if (chosen) await uploadAutomatedScreenshot(chosen.id);
+      onDefectCreated?.(existingDefectId);
       await onDone({
         comment: `Falha já mapeada no defeito ${activeProject?.code}-B${chosen?.seq} — ${chosen?.title}`,
       });
@@ -206,6 +221,7 @@ function AddBugModal({ open, onClose, runCase, onDone, automatedLog, automatedSc
       return;
     }
     if (data?.id) await uploadAutomatedScreenshot(data.id);
+    onDefectCreated?.(data.id);
     setSaving(false);
     toast.success("Defeito criado!");
     await onDone({});

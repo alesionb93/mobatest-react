@@ -9,7 +9,7 @@ import { useProject } from "@/contexts/project-context";
 import { useAutomationJob, type BulkQueueItemPersisted, type PersistedBulkJob } from "@/contexts/automation-job-context";
 import { startMaestroRun, resumeMaestroJob, cancelMaestroJob } from "@/lib/maestro-agent";
 import { updateRunCaseStatus } from "@/lib/run-case-status";
-import { AddBugModal } from "@/pages/test-runs/add-bug-modal";
+import { recordAutomatedFailure } from "@/lib/automated-failures";
 import { DeviceMirrorButton } from "@/pages/test-runs/device-mirror-button";
 import type { TestRunCase } from "@/types/test-runs";
 import type { TestSuite } from "@/types/test-cases";
@@ -35,8 +35,6 @@ function BulkRunModal({ open, onClose, runId, cases, suites, onFinished }: BulkR
   const [queue, setQueue] = React.useState<BulkQueueItemPersisted[]>([]);
   const [currentIndex, setCurrentIndex] = React.useState(0);
   const [cancelled, setCancelled] = React.useState(false);
-  const [bugModalOpen, setBugModalOpen] = React.useState(false);
-  const [bugModalKey, setBugModalKey] = React.useState(0);
   const runningRef = React.useRef(false);
   const queueRef = React.useRef<BulkQueueItemPersisted[]>([]);
   const currentIndexRef = React.useRef(0);
@@ -81,7 +79,6 @@ function BulkRunModal({ open, onClose, runId, cases, suites, onFinished }: BulkR
     if (!open) return;
     setCancelled(false);
     cancelledRef.current = false;
-    setBugModalOpen(false);
     runningRef.current = false;
 
     if (bulkJob && bulkJob.runId === runId) {
@@ -102,11 +99,11 @@ function BulkRunModal({ open, onClose, runId, cases, suites, onFinished }: BulkR
   const finished = queue.length > 0 && currentIndex >= queue.length;
 
   React.useEffect(() => {
-    if (!open || cancelled || bugModalOpen || finished || runningRef.current) return;
+    if (!open || cancelled || finished || runningRef.current) return;
     if (queue.length === 0) return;
     runCurrent();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, currentIndex, cancelled, bugModalOpen, queue.length, finished]);
+  }, [open, currentIndex, cancelled, queue.length, finished]);
 
   React.useEffect(() => {
     if (finished && open) {
@@ -182,12 +179,35 @@ function BulkRunModal({ open, onClose, runId, cases, suites, onFinished }: BulkR
         },
         "automated"
       );
-      runningRef.current = false;
-      advanceIndex();
     } else {
-      setBugModalKey((k) => k + 1);
-      setBugModalOpen(true);
+      // Não pausa mais a fila pra decidir bug — grava o registro de falha
+      // (log + print + duração) e segue direto pro próximo teste. A
+      // triagem (virar defeito, marcar flaky, rerodar) acontece depois, na
+      // aba "Falhas automatizadas".
+      await updateRunCaseStatus(
+        item.runCase.id,
+        {
+          status: "failed",
+          executed_at: new Date().toISOString(),
+          executed_by: user?.id,
+          duration_seconds: result.duration,
+        },
+        "automated"
+      );
+      if (activeProject) {
+        await recordAutomatedFailure({
+          runCaseId: item.runCase.id,
+          projectId: activeProject.id,
+          testCaseTitle: item.runCase.test_cases.title,
+          durationSeconds: result.duration,
+          output: result.output,
+          screenshotBase64: result.screenshotBase64,
+          userId: user?.id,
+        });
+      }
     }
+    runningRef.current = false;
+    advanceIndex();
   }
 
   function advanceIndex() {
@@ -195,29 +215,6 @@ function BulkRunModal({ open, onClose, runId, cases, suites, onFinished }: BulkR
     currentIndexRef.current = nextIndex;
     setCurrentIndex(nextIndex);
     persist(queueRef.current, nextIndex, null);
-  }
-
-  async function handleBugDone(extra: Record<string, unknown>) {
-    const item = queueRef.current[currentIndexRef.current];
-    await updateRunCaseStatus(
-      item.runCase.id,
-      {
-        status: "failed",
-        executed_at: new Date().toISOString(),
-        executed_by: user?.id,
-        duration_seconds: item.duration ?? undefined,
-        ...extra,
-      },
-      "automated"
-    );
-    setBugModalOpen(false);
-    runningRef.current = false;
-    advanceIndex();
-  }
-
-  function handleSkipBug() {
-    setBugModalOpen(false);
-    void handleBugDone({});
   }
 
   function handleCancel() {
@@ -308,18 +305,6 @@ function BulkRunModal({ open, onClose, runId, cases, suites, onFinished }: BulkR
           </div>
         </div>
       </Drawer>
-
-      {current && (
-        <AddBugModal
-          key={bugModalKey}
-          open={bugModalOpen}
-          onClose={handleSkipBug}
-          runCase={current.runCase}
-          automatedLog={current.output}
-          automatedScreenshotBase64={current.screenshotBase64}
-          onDone={handleBugDone}
-        />
-      )}
     </>
   );
 }

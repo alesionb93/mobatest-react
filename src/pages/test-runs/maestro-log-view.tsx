@@ -18,6 +18,18 @@ function MaestroLogView({ output }: MaestroLogViewProps) {
   const [showRaw, setShowRaw] = React.useState(false);
 
   if (parsed.steps.length === 0) {
+    if (parsed.globalFailure) {
+      return (
+        <div className="rounded-md bg-red-50 border border-red-200 px-2.5 py-1.5 text-xs text-red-800">
+          <p className="font-semibold mb-1">{parsed.globalFailure.title}</p>
+          <p className="whitespace-pre-wrap break-words">{parsed.globalFailure.body}</p>
+          <details className="mt-2">
+            <summary className="cursor-pointer text-red-700 hover:text-red-900">Ver mensagem técnica original</summary>
+            <p className="mt-1.5 whitespace-pre-wrap break-words font-mono-table opacity-80">{parsed.cleanedRaw}</p>
+          </details>
+        </div>
+      );
+    }
     return (
       <pre className="max-h-56 overflow-auto rounded-md bg-muted p-2.5 text-xs font-mono whitespace-pre-wrap break-words">
         {parsed.cleanedRaw || "(sem saída de log)"}
@@ -50,9 +62,22 @@ function MaestroLogView({ output }: MaestroLogViewProps) {
               <span className={cn(step.status === "failed" && "font-medium text-foreground")}>{step.label}</span>
             </div>
             {step.detail && (
-              <p className="ml-[23px] rounded-md bg-red-50 border border-red-200 px-2.5 py-1.5 text-xs text-red-800 whitespace-pre-wrap break-words">
-                {step.detail}
-              </p>
+              <div className="ml-[23px] rounded-md bg-red-50 border border-red-200 px-2.5 py-1.5 text-xs text-red-800">
+                {step.friendlyReason ? (
+                  <>
+                    <p className="font-semibold mb-1">{step.friendlyReason.title}</p>
+                    <p className="whitespace-pre-wrap break-words">{step.friendlyReason.body}</p>
+                    <details className="mt-2">
+                      <summary className="cursor-pointer text-red-700 hover:text-red-900">
+                        Ver mensagem técnica original
+                      </summary>
+                      <p className="mt-1.5 whitespace-pre-wrap break-words font-mono-table opacity-80">{step.detail}</p>
+                    </details>
+                  </>
+                ) : (
+                  <p className="whitespace-pre-wrap break-words">{step.detail}</p>
+                )}
+              </div>
             )}
           </div>
         ))}

@@ -19,6 +19,7 @@ import { TestPlansPage } from "@/pages/test-plans-page";
 import { TestRunsPage } from "@/pages/test-runs-page";
 import { JiraPage } from "@/pages/jira-page";
 import { DefectsPage } from "@/pages/defects-page";
+import { AutomatedFailuresPage } from "@/pages/automated-failures-page";
 import { ReportsPage } from "@/pages/reports-page";
 import { TeamPage } from "@/pages/team-page";
 import { RegistriesPage } from "@/pages/registries-page";
@@ -57,6 +58,7 @@ function App() {
               <Route path="/jira/:id" element={<JiraPage />} />
               <Route path="/defects" element={<DefectsPage />} />
               <Route path="/defects/:id" element={<DefectsPage />} />
+              <Route path="/automated-failures" element={<AutomatedFailuresPage />} />
               <Route path="/reports" element={<ReportsPage />} />
               <Route path="/team" element={<TeamPage />} />
               <Route path="/registries" element={<RegistriesPage />} />

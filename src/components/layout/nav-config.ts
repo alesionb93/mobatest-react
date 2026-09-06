@@ -5,6 +5,7 @@ import {
   PlayCircle,
   KanbanSquare,
   Bug,
+  Zap,
   FileBarChart,
   Users,
   Settings2,
@@ -40,6 +41,7 @@ export const navGroups: NavGroup[] = [
     label: "Qualidade",
     items: [
       { label: "Defeitos", to: "/defects", icon: Bug },
+      { label: "Falhas automatizadas", to: "/automated-failures", icon: Zap },
       { label: "Jira", to: "/jira", icon: KanbanSquare },
       { label: "Relatórios", to: "/reports", icon: FileBarChart },
     ],
