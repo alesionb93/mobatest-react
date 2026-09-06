@@ -60,6 +60,22 @@ export interface RunCaseAttempt {
   source: "manual" | "automated";
 }
 
+export type AutomatedFailureStatus = "new" | "flaky" | "promoted" | "ignored";
+
+export interface AutomatedFailure {
+  id: string;
+  test_run_case_id: string;
+  project_id: string;
+  test_case_title: string;
+  occurred_at: string;
+  duration_seconds: number | null;
+  output: string | null;
+  screenshot_path: string | null;
+  status: AutomatedFailureStatus;
+  defect_id: string | null;
+  created_by: string | null;
+}
+
 export interface RunDefect {
   id: string;
   seq: number;
