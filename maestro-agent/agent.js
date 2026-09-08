@@ -511,6 +511,34 @@ const server = http.createServer(async (req, res) => {
         const { scriptPath } = JSON.parse(body);
         if (!scriptPath) throw new Error('Nenhum "scriptPath" informado.');
 
+        // Só um teste por vez — dois Maestro tentando controlar o mesmo
+        // dispositivo ao mesmo tempo é receita certa pra os dois falharem
+        // (um trava esperando o driver, o outro nem consegue conectar).
+        let alreadyRunningJobId = null;
+        for (const [id, j] of jobs.entries()) {
+          if (j.status === 'running') {
+            alreadyRunningJobId = id;
+            break;
+          }
+        }
+        if (alreadyRunningJobId) {
+          const j = jobs.get(alreadyRunningJobId);
+          // Devolve o jobId de quem já está rodando — se for o MESMO script
+          // que o navegador queria rodar (provável reconexão duplicada após
+          // um recarregamento de aba), ele consegue reconectar nesse job em
+          // vez de ficar tentando começar um novo do zero.
+          res.writeHead(409, { 'Content-Type': 'application/json' });
+          res.end(
+            JSON.stringify({
+              ok: false,
+              error: `Já tem um teste automatizado em andamento (${j.scriptPath}). Espere ele terminar antes de rodar outro no mesmo dispositivo.`,
+              conflictingJobId: alreadyRunningJobId,
+              conflictingScriptPath: j.scriptPath,
+            })
+          );
+          return;
+        }
+
         const fullPath = resolveSafeScriptPath(scriptPath);
         const jobId = createJob(scriptPath);
         console.log(`▶ Rodando: ${scriptPath} (job ${jobId})`);

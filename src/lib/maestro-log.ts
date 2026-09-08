@@ -86,6 +86,17 @@ export function translateFailureReason(stepLabel: string, detail: string): { tit
  * de uma asserção específica dentro do fluxo.
  */
 export function translateGlobalFailure(raw: string): { title: string; body: string } | null {
+  if (/driver did not start up in time/i.test(raw)) {
+    return {
+      title: "Não consegui conectar ao dispositivo pra rodar o teste",
+      body:
+        "O Maestro tentou controlar o dispositivo mas não conseguiu conectar a tempo. Isso quase sempre " +
+        "acontece quando **já tem outro teste rodando no mesmo dispositivo ao mesmo tempo** (o agente agora " +
+        "bloqueia isso, mas se você estiver numa versão mais antiga, confira se não tem outra execução em " +
+        "andamento). Também pode ser o emulador/celular temporariamente sem resposta.",
+    };
+  }
+
   if (/not enough devices connected|have 0 devices? connected/i.test(raw)) {
     const match = raw.match(/have (\d+) devices? connected/i);
     const connected = match ? match[1] : "0";
@@ -157,4 +168,16 @@ export function parseMaestroOutput(raw: string): ParsedMaestroLog {
 
   const cleanedRaw = raw.trim();
   return { device, flow, steps, cleanedRaw, globalFailure: steps.length === 0 ? translateGlobalFailure(cleanedRaw) ?? undefined : undefined };
+}
+
+/**
+ * Diz se uma falha foi de infraestrutura (dispositivo desconectado, ADB não
+ * achou nada, etc) em vez de uma falha de verdade do teste — usado pra
+ * decidir a cor certa (amarelo em vez de vermelho) em quem exibe o
+ * resultado.
+ */
+export function isInfraFailure(output: string | undefined): boolean {
+  if (!output) return false;
+  const parsed = parseMaestroOutput(output);
+  return parsed.steps.length === 0 && !!parsed.globalFailure;
 }

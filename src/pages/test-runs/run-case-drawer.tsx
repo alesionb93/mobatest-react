@@ -14,6 +14,7 @@ import { statusBadgeVariant, statusLabel } from "@/lib/labels";
 import { formatMMSS } from "@/pages/test-runs/run-helpers";
 import { AddBugModal } from "@/pages/test-runs/add-bug-modal";
 import { MaestroLogView } from "@/pages/test-runs/maestro-log-view";
+import { isInfraFailure } from "@/lib/maestro-log";
 import { DeviceMirrorButton } from "@/pages/test-runs/device-mirror-button";
 import { startMaestroRun, resumeMaestroJob, cancelMaestroJob } from "@/lib/maestro-agent";
 import { updateRunCaseStatus } from "@/lib/run-case-status";
@@ -217,13 +218,22 @@ function RunCaseDrawer({
     setShowLog(false);
     try {
       const started = await startMaestroRun(tc.automation_script_path);
+      let jobId: string;
       if (!started.ok) {
-        toast.error(`Erro ao executar: ${started.error}`);
-        return;
+        if (started.conflictingJobId && started.conflictingScriptPath === tc.automation_script_path) {
+          // É o mesmo teste já rodando (provável reconexão duplicada após a
+          // aba recarregar sozinha) — reconecta nele em vez de dar erro.
+          jobId = started.conflictingJobId;
+        } else {
+          toast.error(`Erro ao executar: ${started.error}`);
+          return;
+        }
+      } else {
+        jobId = started.jobId;
       }
 
-      activeJobIdRef.current = started.jobId;
-      const data = await resumeMaestroJob(started.jobId);
+      activeJobIdRef.current = jobId;
+      const data = await resumeMaestroJob(jobId);
       activeJobIdRef.current = null;
       if (!data.ok) {
         toast.error(data.error);
@@ -234,7 +244,13 @@ function RunCaseDrawer({
         return;
       }
 
-      toast.success(`Teste automatizado ${data.status === "passed" ? "passou" : "falhou"} (${data.duration}s)!`);
+      if (data.status === "passed") {
+        toast.success(`Teste automatizado passou (${data.duration}s)!`);
+      } else if (isInfraFailure(data.output)) {
+        toast.warning(`Teste automatizado não conseguiu rodar (${data.duration}s) — problema de ambiente/dispositivo.`);
+      } else {
+        toast.error(`Teste automatizado falhou (${data.duration}s)!`);
+      }
       setLastAutomatedRun({
         status: data.status,
         output: data.output ?? "",
@@ -398,9 +414,13 @@ function RunCaseDrawer({
                             {showLog && (
                               <div className="mt-2 flex flex-col gap-2 rounded-lg border border-border bg-card p-3">
                                 <div className="flex items-center gap-2">
-                                  <Badge variant={statusBadgeVariant(lastAutomatedRun.status)}>
-                                    {statusLabel(lastAutomatedRun.status)}
-                                  </Badge>
+                                  {lastAutomatedRun.status === "failed" && isInfraFailure(lastAutomatedRun.output) ? (
+                                    <Badge variant="warning">Não rodou (ambiente/dispositivo)</Badge>
+                                  ) : (
+                                    <Badge variant={statusBadgeVariant(lastAutomatedRun.status)}>
+                                      {statusLabel(lastAutomatedRun.status)}
+                                    </Badge>
+                                  )}
                                 </div>
                                 {lastAutomatedRun.screenshotBase64 && (
                                   <img

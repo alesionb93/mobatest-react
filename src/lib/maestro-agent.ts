@@ -50,7 +50,10 @@ export async function getDeviceMirrorStatus(): Promise<{ ok: true; open: boolean
 
 export async function startMaestroRun(
   scriptPath: string
-): Promise<{ ok: true; jobId: string } | { ok: false; error: string }> {
+): Promise<
+  | { ok: true; jobId: string }
+  | { ok: false; error: string; conflictingJobId?: string; conflictingScriptPath?: string }
+> {
   try {
     const res = await fetch(`${AGENT_BASE}/run`, {
       method: "POST",
