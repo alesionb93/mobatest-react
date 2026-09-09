@@ -88,6 +88,35 @@ export function useTestCasesData() {
     await load();
   }
 
+  /**
+   * Reordena uma suíte pra ficar antes ou depois de uma suíte-alvo, no
+   * mesmo nível dela (mesma suíte-pai). Recalcula a posição de todos os
+   * irmãos daquele nível pra garantir a ordem certa.
+   */
+  async function reorderSuite(draggedId: string, targetSuiteId: string, placement: "before" | "after") {
+    const target = suites.find((s) => s.id === targetSuiteId);
+    const dragged = suites.find((s) => s.id === draggedId);
+    if (!target || !dragged || draggedId === targetSuiteId) return;
+
+    const newParentId = target.parent_suite_id;
+    const siblings = suites
+      .filter((s) => s.id !== draggedId && (s.parent_suite_id ?? null) === (newParentId ?? null))
+      .sort((a, b) => a.position - b.position);
+    const targetIndex = siblings.findIndex((s) => s.id === targetSuiteId);
+    const insertAt = placement === "before" ? targetIndex : targetIndex + 1;
+    const newOrder = [...siblings.slice(0, insertAt), dragged, ...siblings.slice(insertAt)];
+
+    const { error } = await Promise.all(
+      newOrder.map((s, i) => supabase.from("test_suites").update({ position: i, parent_suite_id: newParentId }).eq("id", s.id))
+    ).then((results) => results.find((r) => r.error) ?? { error: null });
+
+    if (error) {
+      toast.error("Erro ao reordenar suíte: " + error.message);
+      return;
+    }
+    await load();
+  }
+
   async function deleteSuite(id: string) {
     const { error } = await supabase.from("test_suites").delete().eq("id", id);
     if (error) {
@@ -207,6 +236,7 @@ export function useTestCasesData() {
     createSuite,
     renameSuite,
     moveSuite,
+    reorderSuite,
     deleteSuite,
     createCase,
     updateCase,

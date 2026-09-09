@@ -21,6 +21,7 @@ interface SuiteTreeProps {
   onCreateSuite: (title: string, parentSuiteId: string | null) => void;
   onRenameSuite: (id: string, title: string) => void;
   onMoveSuite: (id: string, parentSuiteId: string | null) => void;
+  onReorderSuite: (draggedId: string, targetSuiteId: string, placement: "before" | "after") => void;
   onDeleteSuite: (id: string) => void;
 }
 
@@ -33,6 +34,7 @@ function SuiteTree({
   onCreateSuite,
   onRenameSuite,
   onMoveSuite,
+  onReorderSuite,
   onDeleteSuite,
 }: SuiteTreeProps) {
   const [width, setWidth] = React.useState(() => {
@@ -47,6 +49,9 @@ function SuiteTree({
   >(null);
   const [dialogValue, setDialogValue] = React.useState("");
   const [deleteTarget, setDeleteTarget] = React.useState<TestSuite | null>(null);
+  const [dropZone, setDropZone] = React.useState<{ suiteId: string; placement: "before" | "after" | "inside" } | null>(
+    null
+  );
   const resizing = React.useRef(false);
   const widthRef = React.useRef(width);
   widthRef.current = width;
@@ -119,19 +124,40 @@ function SuiteTree({
         <div
           draggable
           onDragStart={(e) => e.dataTransfer.setData("text/suite-id", suite.id)}
-          onDragOver={(e) => e.preventDefault()}
+          onDragOver={(e) => {
+            e.preventDefault();
+            const rect = e.currentTarget.getBoundingClientRect();
+            const relY = (e.clientY - rect.top) / rect.height;
+            const placement: "before" | "after" | "inside" = relY < 0.25 ? "before" : relY > 0.75 ? "after" : "inside";
+            setDropZone({ suiteId: suite.id, placement });
+          }}
+          onDragLeave={(e) => {
+            if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+            setDropZone((prev) => (prev?.suiteId === suite.id ? null : prev));
+          }}
           onDrop={(e) => {
             e.preventDefault();
             const draggedId = e.dataTransfer.getData("text/suite-id");
-            if (draggedId && draggedId !== suite.id) onMoveSuite(draggedId, suite.id);
+            const placement = dropZone?.suiteId === suite.id ? dropZone.placement : "inside";
+            setDropZone(null);
+            if (!draggedId || draggedId === suite.id) return;
+            if (placement === "inside") onMoveSuite(draggedId, suite.id);
+            else onReorderSuite(draggedId, suite.id, placement);
           }}
           onClick={() => onSelectSuite(suite.id)}
           className={cn(
-            "group flex items-center gap-1 rounded-md px-2 py-1.5 text-sm cursor-pointer",
-            selectedSuiteId === suite.id ? "bg-accent text-accent-foreground font-medium" : "hover:bg-accent/60"
+            "group relative flex items-center gap-1 rounded-md px-2 py-1.5 text-sm cursor-pointer",
+            selectedSuiteId === suite.id ? "bg-accent text-accent-foreground font-medium" : "hover:bg-accent/60",
+            dropZone?.suiteId === suite.id && dropZone.placement === "inside" && "bg-brand/10 outline outline-2 outline-brand/40"
           )}
           style={{ paddingLeft: 8 + depth * 16 }}
         >
+          {dropZone?.suiteId === suite.id && dropZone.placement === "before" && (
+            <div className="absolute -top-px left-2 right-2 h-0.5 rounded-full bg-brand" />
+          )}
+          {dropZone?.suiteId === suite.id && dropZone.placement === "after" && (
+            <div className="absolute -bottom-px left-2 right-2 h-0.5 rounded-full bg-brand" />
+          )}
           {hasChildren ? (
             <button
               onClick={(e) => {

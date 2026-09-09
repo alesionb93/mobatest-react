@@ -26,6 +26,7 @@ function TestCasesPage() {
     createSuite,
     renameSuite,
     moveSuite,
+    reorderSuite,
     deleteSuite,
     createCase,
     updateCase,
@@ -117,6 +118,7 @@ function TestCasesPage() {
           onCreateSuite={createSuite}
           onRenameSuite={renameSuite}
           onMoveSuite={moveSuite}
+          onReorderSuite={reorderSuite}
           onDeleteSuite={deleteSuite}
         />
 
