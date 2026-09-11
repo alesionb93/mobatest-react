@@ -12,6 +12,7 @@ export function useTestCasesData() {
   const [cases, setCases] = React.useState<TestCase[]>([]);
   const [historyByCase, setHistoryByCase] = React.useState<HistoryByCase>({});
   const [loading, setLoading] = React.useState(true);
+  const hasLoadedOnceRef = React.useRef(false);
 
   const load = React.useCallback(async () => {
     if (!activeProject) {
@@ -21,7 +22,11 @@ export function useTestCasesData() {
       setLoading(false);
       return;
     }
-    setLoading(true);
+    // Só mostra a tela de carregamento na primeira vez — recarregar depois de
+    // um drag-and-drop, criar suíte, etc. não pode desmontar a árvore inteira
+    // (isso resetava o estado de "colapsado" de todo mundo, causando o bug
+    // de "reordenei e voltou tudo expandido").
+    if (!hasLoadedOnceRef.current) setLoading(true);
     const [suitesRes, casesRes, runCasesRes] = await Promise.all([
       supabase.from("test_suites").select("*").eq("project_id", activeProject.id).order("position"),
       supabase
@@ -51,6 +56,7 @@ export function useTestCasesData() {
     setCases((casesRes.data as TestCase[]) ?? []);
     setHistoryByCase(history);
     setLoading(false);
+    hasLoadedOnceRef.current = true;
   }, [activeProject]);
 
   React.useEffect(() => {

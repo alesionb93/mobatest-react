@@ -1,5 +1,5 @@
 import * as React from "react";
-import { ChevronRight, Folder, MoreHorizontal, Pencil, FolderPlus, Trash2, Plus, GripVertical } from "lucide-react";
+import { ChevronRight, ChevronsUpDown, Folder, MoreHorizontal, Pencil, FolderPlus, Trash2, Plus, GripVertical } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { TestSuite } from "@/types/test-cases";
 import { DropdownMenu } from "@/components/ui/dropdown-menu";
@@ -98,6 +98,32 @@ function SuiteTree({
     return map;
   }, [suites]);
 
+  // Contagem recursiva: uma suíte-pai mostra a soma dela mesma + todas as
+  // sub-suítes, não só os casos direto dentro dela.
+  const totalCountBySuite = React.useMemo(() => {
+    const totals: Record<string, number> = {};
+    function computeTotal(suiteId: string): number {
+      if (totals[suiteId] !== undefined) return totals[suiteId];
+      let total = casesCountBySuite[suiteId] ?? 0;
+      for (const child of byParent[suiteId] ?? []) {
+        total += computeTotal(child.id);
+      }
+      totals[suiteId] = total;
+      return total;
+    }
+    suites.forEach((s) => computeTotal(s.id));
+    return totals;
+  }, [suites, byParent, casesCountBySuite]);
+
+  // IDs de todas as suítes que têm sub-suítes (só elas fazem sentido pra
+  // "expandir/colapsar tudo" — uma suíte sem filhos não tem o que expandir).
+  const allParentIds = React.useMemo(() => suites.filter((s) => (byParent[s.id]?.length ?? 0) > 0).map((s) => s.id), [suites, byParent]);
+  const allCollapsed = allParentIds.length > 0 && allParentIds.every((id) => collapsedIds.has(id));
+
+  function toggleAllCollapsed() {
+    setCollapsedIds(allCollapsed ? new Set() : new Set(allParentIds));
+  }
+
   function openDialogValue(initial: string) {
     setDialogValue(initial);
   }
@@ -117,7 +143,7 @@ function SuiteTree({
     const children = byParent[suite.id] ?? [];
     const hasChildren = children.length > 0;
     const collapsed = collapsedIds.has(suite.id);
-    const count = casesCountBySuite[suite.id] ?? 0;
+    const count = totalCountBySuite[suite.id] ?? 0;
 
     return (
       <div key={suite.id}>
@@ -218,16 +244,26 @@ function SuiteTree({
       <div className="flex-1 flex flex-col gap-1 pr-2 overflow-y-auto">
         <div className="flex items-center justify-between px-1 pb-1">
           <span className="text-xs font-medium text-muted-foreground">Suítes</span>
-          <button
-            onClick={() => {
-              setDialog({ mode: "create", parentSuiteId: null });
-              openDialogValue("");
-            }}
-            className="text-muted-foreground hover:text-foreground rounded p-0.5"
-            title="Nova suíte"
-          >
-            <Plus size={14} />
-          </button>
+          <div className="flex items-center gap-0.5">
+            <button
+              onClick={toggleAllCollapsed}
+              disabled={allParentIds.length === 0}
+              className="text-muted-foreground hover:text-foreground rounded p-0.5 disabled:opacity-30 disabled:pointer-events-none"
+              title={allCollapsed ? "Expandir tudo" : "Colapsar tudo"}
+            >
+              <ChevronsUpDown size={14} />
+            </button>
+            <button
+              onClick={() => {
+                setDialog({ mode: "create", parentSuiteId: null });
+                openDialogValue("");
+              }}
+              className="text-muted-foreground hover:text-foreground rounded p-0.5"
+              title="Nova suíte"
+            >
+              <Plus size={14} />
+            </button>
+          </div>
         </div>
         <div
           onClick={() => onSelectSuite("all")}
