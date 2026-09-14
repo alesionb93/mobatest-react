@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import veiserIcon from "@/assets/marca/veiser-test-icone-app.svg";
 import { statusBadgeVariant, statusLabel } from "@/lib/labels";
 
 interface PublicRunCase {
@@ -121,7 +122,7 @@ function PublicReportPage() {
     <div className="min-h-screen bg-background">
       <div className="mx-auto max-w-3xl px-5 py-8">
         <div className="flex items-center gap-2 mb-6">
-          <img src="/veiser-icon.png" alt="Veiser" className="h-6 w-6 rounded-md object-cover" />
+          <img src={veiserIcon} alt="Veiser" className="h-6 w-6 rounded-md object-cover" />
           <span className="font-semibold text-sm text-foreground">Veiser Test</span>
           <span className="text-xs text-muted-foreground">· relatório público (somente leitura)</span>
         </div>

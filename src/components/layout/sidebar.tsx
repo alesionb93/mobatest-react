@@ -1,9 +1,11 @@
 import { NavLink } from "react-router-dom";
-import { ChevronsLeft, ChevronsRight, LogOut } from "lucide-react";
+import { ChevronsLeft, ChevronsRight, LogOut, Sun, Moon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { navGroups } from "@/components/layout/nav-config";
 import { useAuth } from "@/contexts/auth-context";
 import { useProject } from "@/contexts/project-context";
+import { useTheme } from "@/contexts/theme-context";
+import veiserIcon from "@/assets/marca/veiser-test-icone-app.svg";
 
 interface SidebarProps {
   collapsed: boolean;
@@ -18,6 +20,7 @@ function initialsFromEmail(email: string | undefined) {
 function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const { user, signOut } = useAuth();
   const { activeProject } = useProject();
+  const { theme, toggleTheme } = useTheme();
   const fullName = (user?.user_metadata?.full_name as string | undefined) ?? user?.email ?? "";
 
   return (
@@ -28,7 +31,7 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
       )}
     >
       <div className="h-14 flex items-center gap-2 px-4 border-b border-sidebar-border">
-        <img src="/veiser-icon.png" alt="Veiser" className="h-7 w-7 shrink-0 rounded-md object-cover" />
+        <img src={veiserIcon} alt="Veiser" className="h-7 w-7 shrink-0 rounded-md object-cover" />
         {!collapsed && (
           <span className="text-sm font-semibold text-sidebar-foreground truncate">
             {activeProject ? activeProject.name : "Veiser Test"}
@@ -89,6 +92,17 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
             </button>
           )}
         </div>
+        <button
+          onClick={toggleTheme}
+          className={cn(
+            "flex items-center gap-2 rounded-md px-2 py-1.5 text-xs text-muted-foreground hover:bg-sidebar-accent",
+            collapsed && "justify-center"
+          )}
+          title={theme === "dark" ? "Mudar pro modo claro" : "Mudar pro modo escuro"}
+        >
+          {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
+          {!collapsed && (theme === "dark" ? "Modo claro" : "Modo escuro")}
+        </button>
         <button
           onClick={onToggle}
           className={cn(

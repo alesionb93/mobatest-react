@@ -137,3 +137,59 @@
     font-variant-numeric: tabular-nums;
   }
 }
+
+/*
+ * Modo escuro — reintroduzido depois da migração pro React (LEIA-ME.txt do pacote de marca
+ * v1.0). Paleta ancorada nas cores oficiais "negativo" da marca (Navy #0E2240, Blue Light
+ * #5AB8E8), não inventada do zero. Ativado via classe .dark em <html> — ver theme-context.tsx.
+ */
+.dark {
+  --background: rgba(13, 20, 31, 1);
+  --foreground: rgba(237, 242, 247, 1);
+
+  --card: rgba(19, 29, 43, 1);
+  --card-foreground: rgba(237, 242, 247, 1);
+
+  --popover: rgba(19, 29, 43, 1);
+  --popover-foreground: rgba(237, 242, 247, 1);
+
+  --primary: rgba(237, 242, 247, 1);
+  --primary-foreground: rgba(13, 20, 31, 1);
+
+  --secondary: rgba(30, 43, 61, 1);
+  --secondary-foreground: rgba(237, 242, 247, 1);
+
+  --muted: rgba(30, 43, 61, 1);
+  --muted-foreground: rgba(148, 163, 184, 1);
+
+  --accent: rgba(30, 43, 61, 1);
+  --accent-foreground: rgba(237, 242, 247, 1);
+
+  --destructive: rgba(248, 113, 113, 1);
+  --destructive-foreground: rgba(20, 10, 10, 1);
+
+  --border: rgba(41, 56, 76, 1);
+  --input: rgba(41, 56, 76, 1);
+  --ring: rgba(90, 184, 232, 1);
+
+  --brand: #5ab8e8;
+
+  --sidebar: rgba(9, 15, 24, 1);
+  --sidebar-foreground: rgba(237, 242, 247, 1);
+  --sidebar-accent: rgba(30, 43, 61, 1);
+  --sidebar-accent-foreground: rgba(237, 242, 247, 1);
+  --sidebar-border: rgba(41, 56, 76, 1);
+
+  --status-success: rgba(52, 211, 153, 1);
+  --status-warning: rgba(251, 191, 36, 1);
+  --status-info: rgba(96, 165, 250, 1);
+
+  --chart-1: rgba(52, 211, 153, 1);
+  --chart-2: rgba(96, 165, 250, 1);
+  --chart-3: rgba(251, 146, 60, 1);
+  --chart-4: rgba(167, 139, 250, 1);
+  --chart-5: rgba(244, 114, 182, 1);
+
+  --elevation-sm: 0px 1px 2px 0px rgba(0, 0, 0, 0.4);
+  --elevation-card: 0px 1px 3px 0px rgba(0, 0, 0, 0.5), 0px 1px 2px -1px rgba(0, 0, 0, 0.5);
+}
