@@ -32,6 +32,7 @@ function TestCasesPage() {
     updateCase,
     duplicateCase,
     deleteCase,
+    reorderCase,
     bulkUpdateCases,
     bulkCreateCases,
     bulkDeleteCases,
@@ -132,6 +133,7 @@ function TestCasesPage() {
           onImportCSV={() => setImportOpen(true)}
           onExportCSV={(list) => exportCasesToCSV(list, suiteTitleById, activeProject?.code ?? "PROJ")}
           onDuplicate={duplicateCase}
+          onReorderCase={reorderCase}
           onBulkUpdate={(ids, patch) => bulkUpdateCases(ids, patch as Partial<TestCaseInput>)}
           onBulkDelete={bulkDeleteCases}
           searchTerm={searchTerm}
