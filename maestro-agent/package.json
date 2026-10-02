@@ -1,0 +1,5 @@
+{
+  "name": "maestro-agent",
+  "private": true,
+  "description": "Agente local do Maestro para o Veiser Test — roda separado do frontend."
+}
