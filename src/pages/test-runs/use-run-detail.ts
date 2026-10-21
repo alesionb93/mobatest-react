@@ -2,6 +2,7 @@ import * as React from "react";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
 import { useProject } from "@/contexts/project-context";
+import { collectEvidencePaths, removeEvidenceFiles } from "@/lib/run-case-evidences";
 import type { TestRun, TestRunCase, RunDefect, Profile } from "@/types/test-runs";
 import type { TestSuite } from "@/types/test-cases";
 
@@ -138,11 +139,13 @@ export function useRunDetail(runId: string | undefined) {
   }
 
   async function bulkRemove(ids: string[]) {
+    const evidencePaths = await collectEvidencePaths({ runCaseIds: ids });
     const { error } = await supabase.from("test_run_cases").delete().in("id", ids);
     if (error) {
       toast.error("Erro ao remover casos: " + error.message);
       return;
     }
+    await removeEvidenceFiles(evidencePaths);
     toast.success("Casos removidos da execução.");
     await load();
   }

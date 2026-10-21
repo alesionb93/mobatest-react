@@ -60,6 +60,19 @@ export interface RunCaseAttempt {
   source: "manual" | "automated";
 }
 
+/** Foto/vídeo anexado a um caso dentro de uma execução (já comprimido). */
+export interface RunCaseEvidence {
+  id: string;
+  test_run_case_id: string;
+  storage_path: string;
+  file_name: string;
+  file_type: string;
+  file_size: number;
+  original_size: number | null;
+  created_by: string | null;
+  created_at: string;
+}
+
 export type AutomatedFailureStatus = "new" | "flaky" | "promoted" | "ignored";
 
 export interface AutomatedFailure {

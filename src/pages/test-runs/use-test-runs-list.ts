@@ -2,6 +2,7 @@ import * as React from "react";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
 import { useProject } from "@/contexts/project-context";
+import { collectEvidencePaths, removeEvidenceFiles } from "@/lib/run-case-evidences";
 import type { TestRunListItem } from "@/types/test-runs";
 
 export function useTestRunsList() {
@@ -31,11 +32,14 @@ export function useTestRunsList() {
   }, [load]);
 
   async function deleteRun(id: string) {
+    // As evidências somem do banco em cascata, mas os arquivos ficariam no Storage — coleta antes, remove depois.
+    const evidencePaths = await collectEvidencePaths({ runId: id });
     const { error } = await supabase.from("test_runs").delete().eq("id", id);
     if (error) {
       toast.error("Erro ao excluir execução: " + error.message);
       return;
     }
+    await removeEvidenceFiles(evidencePaths);
     toast.success("Execução excluída.");
     await load();
   }

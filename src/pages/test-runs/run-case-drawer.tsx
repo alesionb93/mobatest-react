@@ -16,6 +16,7 @@ import { AddBugModal } from "@/pages/test-runs/add-bug-modal";
 import { MaestroLogView } from "@/pages/test-runs/maestro-log-view";
 import { isInfraFailure } from "@/lib/maestro-log";
 import { DeviceMirrorButton } from "@/pages/test-runs/device-mirror-button";
+import { RunCaseEvidences } from "@/pages/test-runs/run-case-evidences";
 import { startMaestroRun, resumeMaestroJob, cancelMaestroJob } from "@/lib/maestro-agent";
 import { updateRunCaseStatus } from "@/lib/run-case-status";
 import { recordAutomatedFailure } from "@/lib/automated-failures";
@@ -461,6 +462,9 @@ function RunCaseDrawer({
                 </span>
                 <ReadonlyBlock html={tc.postconditions} emptyLabel="Não definido." />
               </div>
+
+              {/* Fora do bloco "Marcar resultado": vale com o caso a preencher ou já preenchido. */}
+              <RunCaseEvidences runCaseId={rc.id} />
             </div>
           )}
 

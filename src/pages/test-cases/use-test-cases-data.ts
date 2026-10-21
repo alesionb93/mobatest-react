@@ -1,6 +1,7 @@
 import * as React from "react";
 import { supabase } from "@/lib/supabase";
 import { useProject } from "@/contexts/project-context";
+import { collectEvidencePaths, removeEvidenceFiles } from "@/lib/run-case-evidences";
 import type { TestSuite, TestCase, TestCaseInput, RunCaseStatus } from "@/types/test-cases";
 import { toast } from "sonner";
 
@@ -213,11 +214,13 @@ export function useTestCasesData() {
   }
 
   async function deleteCase(id: string) {
+    const evidencePaths = await collectEvidencePaths({ testCaseIds: [id] });
     const { error } = await supabase.from("test_cases").delete().eq("id", id);
     if (error) {
       toast.error("Erro ao excluir caso: " + error.message);
       return;
     }
+    await removeEvidenceFiles(evidencePaths);
     toast.success("Caso de teste excluído.");
     await load();
   }
@@ -253,11 +256,13 @@ export function useTestCasesData() {
   }
 
   async function bulkDeleteCases(ids: string[]) {
+    const evidencePaths = await collectEvidencePaths({ testCaseIds: ids });
     const { error } = await supabase.from("test_cases").delete().in("id", ids);
     if (error) {
       toast.error("Erro ao excluir casos selecionados: " + error.message);
       return;
     }
+    await removeEvidenceFiles(evidencePaths);
     toast.success(`${ids.length} caso(s) excluído(s).`);
     await load();
   }
