@@ -1,8 +1,9 @@
 import * as React from "react";
-import { Play } from "lucide-react";
+import { ChevronLeft, ChevronRight, ExternalLink, Play, X } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
 import { Badge } from "@/components/ui/badge";
+import { formatBytes } from "@/lib/format";
 import { Skeleton } from "@/components/ui/skeleton";
 import veiserIcon from "@/assets/marca/veiser-test-icone-app.svg";
 import { statusBadgeVariant, statusLabel } from "@/lib/labels";
@@ -211,48 +212,206 @@ function PublicReportPage() {
   );
 }
 
-/** Miniaturas das evidências do caso; clicar abre o arquivo inteiro numa aba nova. */
-function EvidenceRow({ items }: { items: PublicEvidence[] }) {
-  if (items.length === 0) return null;
+/** Coluna "Evidências": só um botão — nenhuma imagem é baixada até alguém querer ver. */
+function EvidenceCell({
+  items,
+  onOpen,
+}: {
+  items: PublicEvidence[];
+  onOpen: (items: PublicEvidence[], trigger: HTMLElement) => void;
+}) {
+  if (items.length === 0) return <span className="text-muted-foreground">—</span>;
   return (
-    <tr className="border-b border-border">
-      <td />
-      <td colSpan={4} className="px-4 pb-3">
-        <p className="mb-1.5 text-xs text-muted-foreground">Evidências ({items.length})</p>
-        <div className="flex flex-wrap gap-2">
-          {items.map((e) => (
-            <a
-              key={e.id}
-              href={e.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              title={e.fileName}
-              className="relative block h-20 w-20 overflow-hidden rounded-md border border-border bg-muted"
-            >
-              {e.contentType.startsWith("video/") ? (
-                <>
-                  {/* #t=0.1 faz o navegador mostrar um quadro do vídeo como miniatura */}
-                  <video src={`${e.url}#t=0.1`} preload="metadata" muted playsInline className="h-full w-full object-cover" />
-                  <span className="absolute inset-0 flex items-center justify-center">
-                    <span className="rounded-full bg-black/60 p-1.5 text-white">
-                      <Play size={14} />
-                    </span>
-                  </span>
-                </>
-              ) : (
-                <img src={e.url} alt={e.fileName} loading="lazy" className="h-full w-full object-cover" />
-              )}
-            </a>
-          ))}
+    <button
+      type="button"
+      title="Abrir as evidências deste caso"
+      aria-haspopup="dialog"
+      onClick={(e) => onOpen(items, e.currentTarget)}
+      className="cursor-pointer text-xs font-medium text-brand hover:underline"
+    >
+      Ver ({items.length})
+    </button>
+  );
+}
+
+/**
+ * Galeria das evidências de um caso: imagem/vídeo grande, contador, setas (← →), miniaturas pra
+ * pular e link pro original. Esc ou clique fora fecha. Só carrega os arquivos quando abre.
+ */
+function EvidenceGallery({
+  items,
+  title,
+  trigger,
+  onClose,
+}: {
+  items: PublicEvidence[];
+  title: string;
+  trigger: HTMLElement;
+  onClose: () => void;
+}) {
+  const [index, setIndex] = React.useState(0);
+  const [failed, setFailed] = React.useState<ReadonlySet<string>>(new Set());
+  const dialogRef = React.useRef<HTMLDivElement>(null);
+  const last = items.length - 1;
+  const current = items[index];
+  const isVideo = current.contentType.startsWith("video/");
+
+  const go = React.useCallback((delta: number) => setIndex((i) => Math.min(last, Math.max(0, i + delta))), [last]);
+
+  React.useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    dialogRef.current?.focus();
+
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        onClose();
+      } else if ((e.key === "ArrowRight" || e.key === "ArrowLeft") && !(e.target instanceof HTMLVideoElement)) {
+        // Com o foco no vídeo, as setas pertencem ao player (avançar/voltar o vídeo).
+        e.preventDefault();
+        go(e.key === "ArrowRight" ? 1 : -1);
+      } else if (e.key === "Tab" && dialogRef.current) {
+        // O foco fica preso na galeria enquanto ela está aberta.
+        const focusable = Array.from(
+          dialogRef.current.querySelectorAll<HTMLElement>("button:not([disabled]), a[href], video[controls]")
+        );
+        if (focusable.length === 0) return;
+        const first = focusable[0];
+        const lastEl = focusable[focusable.length - 1];
+        const active = document.activeElement;
+        if (!dialogRef.current.contains(active)) {
+          e.preventDefault();
+          first.focus();
+        } else if (e.shiftKey && (active === first || active === dialogRef.current)) {
+          e.preventDefault();
+          lastEl.focus();
+        } else if (!e.shiftKey && active === lastEl) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.body.style.overflow = previousOverflow;
+      if (trigger.isConnected) trigger.focus();
+    };
+  }, [trigger, onClose, go]);
+
+  const markFailed = (id: string) => setFailed((prev) => new Set(prev).add(id));
+  const navButton =
+    "absolute top-1/2 z-10 -translate-y-1/2 rounded-full bg-black/60 p-2 text-white hover:bg-black/80 disabled:pointer-events-none disabled:opacity-30";
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-3 sm:p-6"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Evidências: ${title}`}
+        tabIndex={-1}
+        className="flex max-h-full w-full max-w-4xl flex-col gap-3 rounded-xl border border-white/10 bg-neutral-950 p-3 text-white outline-none sm:p-4"
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold">{title}</p>
+            <p className="truncate text-xs text-white/60">
+              {index + 1} de {items.length} · {current.fileName} · {formatBytes(current.fileSize)}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Fechar"
+            className="shrink-0 rounded-md p-1.5 text-white/70 hover:bg-white/10 hover:text-white"
+          >
+            <X size={18} />
+          </button>
         </div>
-      </td>
-    </tr>
+
+        <div className="relative flex min-h-[200px] flex-1 items-center justify-center overflow-hidden">
+          <button type="button" aria-label="Anterior" disabled={index === 0} onClick={() => go(-1)} className={`${navButton} left-1`}>
+            <ChevronLeft size={20} />
+          </button>
+          {failed.has(current.id) ? (
+            <p className="max-w-sm px-12 text-center text-sm text-white/70">
+              Não foi possível carregar este arquivo. Os links são temporários (1 hora): atualize a página e tente
+              de novo.
+            </p>
+          ) : isVideo ? (
+            <video
+              key={current.id}
+              src={current.url}
+              controls
+              preload="metadata"
+              playsInline
+              onError={() => markFailed(current.id)}
+              className="max-h-[65vh] max-w-full rounded-md bg-black"
+            />
+          ) : (
+            <img
+              key={current.id}
+              src={current.url}
+              alt={current.fileName}
+              onError={() => markFailed(current.id)}
+              className="max-h-[65vh] max-w-full rounded-md object-contain"
+            />
+          )}
+          <button type="button" aria-label="Próxima" disabled={index === last} onClick={() => go(1)} className={`${navButton} right-1`}>
+            <ChevronRight size={20} />
+          </button>
+        </div>
+
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex min-w-0 gap-1.5 overflow-x-auto pb-1">
+            {items.map((e, i) => (
+              <button
+                key={e.id}
+                type="button"
+                onClick={() => setIndex(i)}
+                title={e.fileName}
+                aria-label={`Ir para a evidência ${i + 1} de ${items.length}`}
+                aria-current={i === index}
+                className={`relative h-12 w-12 shrink-0 overflow-hidden rounded-md border bg-white/5 ${
+                  i === index ? "border-brand ring-2 ring-brand" : "border-white/15 opacity-70 hover:opacity-100"
+                }`}
+              >
+                {e.contentType.startsWith("video/") ? (
+                  <span className="flex h-full w-full items-center justify-center text-white/80">
+                    <Play size={16} />
+                  </span>
+                ) : (
+                  <img src={e.url} alt="" loading="lazy" className="h-full w-full object-cover" />
+                )}
+              </button>
+            ))}
+          </div>
+          <a
+            href={current.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-white/20 px-2.5 py-1.5 text-xs text-white/90 hover:bg-white/10"
+          >
+            <ExternalLink size={13} />
+            Abrir original
+          </a>
+        </div>
+      </div>
+    </div>
   );
 }
 
 function ReportContent({ data, evidences }: { data: PublicReportData; evidences: PublicEvidence[] }) {
   const { run, cases, suites, defects } = data;
   const evidenceIndex = React.useMemo(() => indexEvidences(evidences), [evidences]);
+  const [gallery, setGallery] = React.useState<{ items: PublicEvidence[]; title: string; trigger: HTMLElement } | null>(null);
+  const closeGallery = React.useCallback(() => setGallery(null), []);
   const groups = groupCasesBySuite(cases ?? [], suites ?? []);
   const total = (cases ?? []).length || 1;
   const executed = (cases ?? []).filter((c) => c.status && c.status !== "untested").length;
@@ -323,7 +482,7 @@ function ReportContent({ data, evidences }: { data: PublicReportData; evidences:
         </div>
       )}
 
-      <div className="rounded-xl border border-border bg-card overflow-hidden">
+      <div className="rounded-xl border border-border bg-card overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="text-left text-xs text-muted-foreground border-b border-border">
@@ -332,13 +491,14 @@ function ReportContent({ data, evidences }: { data: PublicReportData; evidences:
               <th className="px-4 py-2 font-medium">Prioridade</th>
               <th className="px-4 py-2 font-medium">Status</th>
               <th className="px-4 py-2 font-medium">Duração</th>
+              <th className="px-4 py-2 font-medium">Evidências</th>
             </tr>
           </thead>
           <tbody>
             {groups.map((g, gi) => (
               <React.Fragment key={gi}>
                 <tr className="bg-muted/50">
-                  <td colSpan={5} className="px-4 py-2 text-xs font-semibold text-muted-foreground">
+                  <td colSpan={6} className="px-4 py-2 text-xs font-semibold text-muted-foreground">
                     {g.title} <span className="font-normal">({g.cases.length})</span>
                   </td>
                 </tr>
@@ -358,18 +518,25 @@ function ReportContent({ data, evidences }: { data: PublicReportData; evidences:
                       <td className="px-4 py-2 font-mono-table text-xs text-muted-foreground">
                         {formatDuration(c.duration_seconds)}
                       </td>
+                      <td className="px-4 py-2 align-top">
+                        <EvidenceCell
+                          items={evidencesForCase(c, evidenceIndex)}
+                          onOpen={(items, trigger) =>
+                            setGallery({ items, trigger, title: `${run.project_code}-${c.seq} · ${c.title}` })
+                          }
+                        />
+                      </td>
                     </tr>
                     {c.comment && (
                       <tr className="border-b border-border">
                         <td />
-                        <td colSpan={4} className="px-4 pb-2">
+                        <td colSpan={5} className="px-4 pb-2">
                           <div className="rounded-r-lg border-l-2 border-brand bg-muted/40 px-3 py-1.5 text-xs text-muted-foreground">
                             {stripHtml(c.comment)}
                           </div>
                         </td>
                       </tr>
                     )}
-                    <EvidenceRow items={evidencesForCase(c, evidenceIndex)} />
                   </React.Fragment>
                 ))}
               </React.Fragment>
@@ -377,6 +544,8 @@ function ReportContent({ data, evidences }: { data: PublicReportData; evidences:
           </tbody>
         </table>
       </div>
+
+      {gallery && <EvidenceGallery {...gallery} onClose={closeGallery} />}
 
       <p className="text-center text-xs text-muted-foreground">
         Gerado pelo Veiser Test — este é um link somente leitura, sem acesso ao restante da conta.
