@@ -1,4 +1,5 @@
 import * as React from "react";
+import { Play } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
 import { Badge } from "@/components/ui/badge";
@@ -29,6 +30,16 @@ interface PublicDefect {
   severity: string;
   status: string;
   test_run_case_id: string | null;
+}
+/** Evidência (foto/vídeo) devolvida por /api/report-evidences, já com link temporário. */
+interface PublicEvidence {
+  id: string;
+  testRunCaseId: string;
+  testCaseId: string | null;
+  fileName: string;
+  contentType: string;
+  fileSize: number;
+  url: string;
 }
 interface PublicReportData {
   run: {
@@ -61,6 +72,38 @@ function stripHtml(html: string | null) {
   const div = document.createElement("div");
   div.innerHTML = html;
   return div.textContent ?? "";
+}
+
+/**
+ * Evidências por id de caso. Cada evidência entra sob os DOIS ids (o do caso na execução e o do
+ * caso de teste): como são UUIDs, não existe como ligar a evidência ao caso errado, e a página
+ * funciona seja qual for o id que a função do banco usa em `cases[].id`.
+ */
+function indexEvidences(evidences: PublicEvidence[]) {
+  const index = new Map<string, PublicEvidence[]>();
+  const add = (key: string | null, e: PublicEvidence) => {
+    if (!key) return;
+    const list = index.get(key);
+    if (list) list.push(e);
+    else index.set(key, [e]);
+  };
+  evidences.forEach((e) => {
+    add(e.testRunCaseId, e);
+    if (e.testCaseId !== e.testRunCaseId) add(e.testCaseId, e);
+  });
+  return index;
+}
+function evidencesForCase(c: PublicRunCase, index: Map<string, PublicEvidence[]>) {
+  const seen = new Set<string>();
+  const found: PublicEvidence[] = [];
+  [c.id, c.case_id].forEach((key) => {
+    (index.get(key) ?? []).forEach((e) => {
+      if (seen.has(e.id)) return;
+      seen.add(e.id);
+      found.push(e);
+    });
+  });
+  return found;
 }
 
 function groupCasesBySuite(cases: PublicRunCase[], suites: PublicSuite[]) {
@@ -97,6 +140,7 @@ function PublicReportPage() {
   const [data, setData] = React.useState<PublicReportData | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [notFound, setNotFound] = React.useState(false);
+  const [evidences, setEvidences] = React.useState<PublicEvidence[]>([]);
 
   React.useEffect(() => {
     if (!token) {
@@ -117,6 +161,22 @@ function PublicReportPage() {
       cancelled = true;
     };
   }, [token]);
+
+  // As evidências vêm depois e por fora: se esse pedido falhar (ou não existir, como no `npm run dev`
+  // local), o relatório aparece igual, só sem as miniaturas.
+  React.useEffect(() => {
+    if (!token || !data) return;
+    const controller = new AbortController();
+    fetch(`/api/report-evidences?token=${encodeURIComponent(token)}`, { signal: controller.signal })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((body: { evidences?: PublicEvidence[] } | null) => {
+        if (!body || !Array.isArray(body.evidences)) return;
+        // Só links http(s) viram imagem/vídeo na página.
+        setEvidences(body.evidences.filter((e) => typeof e.url === "string" && /^https?:\/\//.test(e.url)));
+      })
+      .catch(() => {});
+    return () => controller.abort();
+  }, [token, data]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -145,14 +205,54 @@ function PublicReportPage() {
           />
         )}
 
-        {!loading && data && <ReportContent data={data} />}
+        {!loading && data && <ReportContent data={data} evidences={evidences} />}
       </div>
     </div>
   );
 }
 
-function ReportContent({ data }: { data: PublicReportData }) {
+/** Miniaturas das evidências do caso; clicar abre o arquivo inteiro numa aba nova. */
+function EvidenceRow({ items }: { items: PublicEvidence[] }) {
+  if (items.length === 0) return null;
+  return (
+    <tr className="border-b border-border">
+      <td />
+      <td colSpan={4} className="px-4 pb-3">
+        <p className="mb-1.5 text-xs text-muted-foreground">Evidências ({items.length})</p>
+        <div className="flex flex-wrap gap-2">
+          {items.map((e) => (
+            <a
+              key={e.id}
+              href={e.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              title={e.fileName}
+              className="relative block h-20 w-20 overflow-hidden rounded-md border border-border bg-muted"
+            >
+              {e.contentType.startsWith("video/") ? (
+                <>
+                  {/* #t=0.1 faz o navegador mostrar um quadro do vídeo como miniatura */}
+                  <video src={`${e.url}#t=0.1`} preload="metadata" muted playsInline className="h-full w-full object-cover" />
+                  <span className="absolute inset-0 flex items-center justify-center">
+                    <span className="rounded-full bg-black/60 p-1.5 text-white">
+                      <Play size={14} />
+                    </span>
+                  </span>
+                </>
+              ) : (
+                <img src={e.url} alt={e.fileName} loading="lazy" className="h-full w-full object-cover" />
+              )}
+            </a>
+          ))}
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+function ReportContent({ data, evidences }: { data: PublicReportData; evidences: PublicEvidence[] }) {
   const { run, cases, suites, defects } = data;
+  const evidenceIndex = React.useMemo(() => indexEvidences(evidences), [evidences]);
   const groups = groupCasesBySuite(cases ?? [], suites ?? []);
   const total = (cases ?? []).length || 1;
   const executed = (cases ?? []).filter((c) => c.status && c.status !== "untested").length;
@@ -269,6 +369,7 @@ function ReportContent({ data }: { data: PublicReportData }) {
                         </td>
                       </tr>
                     )}
+                    <EvidenceRow items={evidencesForCase(c, evidenceIndex)} />
                   </React.Fragment>
                 ))}
               </React.Fragment>
