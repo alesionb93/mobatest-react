@@ -1,9 +1,11 @@
 import * as React from "react";
 import { ChevronLeft, ChevronRight, ExternalLink, Play, X } from "lucide-react";
+import DOMPurify from "dompurify";
 import { useSearchParams } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
 import { Badge } from "@/components/ui/badge";
 import { formatBytes } from "@/lib/format";
+import { cn, richTextClasses } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import veiserIcon from "@/assets/marca/veiser-test-icone-app.svg";
 import { statusBadgeVariant, statusLabel } from "@/lib/labels";
@@ -41,6 +43,15 @@ interface PublicEvidence {
   contentType: string;
   fileSize: number;
   url: string;
+}
+/** O "template" de um teste (descrição, pré-requisitos, passos, resultado esperado), vindo de /api/report-cases. */
+interface CaseTemplate {
+  testRunCaseId: string;
+  testCaseId: string;
+  description: string | null;
+  preconditions: string | null;
+  reproSteps: string | null;
+  expectedResult: string | null;
 }
 interface PublicReportData {
   run: {
@@ -105,6 +116,40 @@ function evidencesForCase(c: PublicRunCase, index: Map<string, PublicEvidence[]>
     });
   });
   return found;
+}
+
+/**
+ * Os textos dos testes são HTML escrito por gente da empresa (o editor do sistema). Numa página
+ * PÚBLICA nada disso vai pra tela cru: passa pelo DOMPurify, que tira script, atributos de evento
+ * (onerror...), links "javascript:" e o que mais for perigoso.
+ */
+let purifyConfigured = false;
+function sanitizeHtml(html: string | null | undefined): string {
+  const value = (html ?? "").trim();
+  if (!value) return "";
+  if (!purifyConfigured) {
+    purifyConfigured = true;
+    // Links dos textos abrem em aba nova, sem dar acesso à página de origem.
+    DOMPurify.addHook("afterSanitizeAttributes", (node) => {
+      if (node instanceof Element && node.tagName === "A") {
+        node.setAttribute("target", "_blank");
+        node.setAttribute("rel", "noopener noreferrer");
+      }
+    });
+  }
+  const clean = DOMPurify.sanitize(value, { USE_PROFILES: { html: true } }).trim();
+  // O editor grava "<p></p>" quando o campo fica vazio: sem texto nem imagem, conta como vazio.
+  return stripHtml(clean).trim() === "" && !/<(img|hr|video)\b/i.test(clean) ? "" : clean;
+}
+
+/** Conteúdo dos testes por id (do caso na execução E do caso de teste): são UUIDs, não se confundem. */
+function indexTemplates(cases: CaseTemplate[]) {
+  const index = new Map<string, CaseTemplate>();
+  cases.forEach((t) => {
+    index.set(t.testRunCaseId, t);
+    index.set(t.testCaseId, t);
+  });
+  return index;
 }
 
 function groupCasesBySuite(cases: PublicRunCase[], suites: PublicSuite[]) {
@@ -206,7 +251,7 @@ function PublicReportPage() {
           />
         )}
 
-        {!loading && data && <ReportContent data={data} evidences={evidences} />}
+        {!loading && data && token && <ReportContent data={data} evidences={evidences} token={token} />}
       </div>
     </div>
   );
@@ -407,8 +452,139 @@ function EvidenceGallery({
   );
 }
 
-function ReportContent({ data, evidences }: { data: PublicReportData; evidences: PublicEvidence[] }) {
+function TemplateBlock({ label, html, emptyLabel }: { label: string; html: string | null; emptyLabel: string }) {
+  const clean = React.useMemo(() => sanitizeHtml(html), [html]);
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{label}</span>
+      {clean ? (
+        <div className={cn("text-sm text-foreground [&_a]:text-brand [&_a]:underline", richTextClasses)}
+          dangerouslySetInnerHTML={{ __html: clean }} />
+      ) : (
+        <p className="text-sm text-muted-foreground italic">{emptyLabel}</p>
+      )}
+    </div>
+  );
+}
+
+type TemplatesStatus = "idle" | "loading" | "ready" | "error";
+
+/** A linha que abre embaixo do título: o template do teste, na mesma ordem do drawer do sistema. */
+function TemplateRow({
+  id,
+  status,
+  template,
+  onRetry,
+}: {
+  id: string;
+  status: TemplatesStatus;
+  template: CaseTemplate | undefined;
+  onRetry: () => void;
+}) {
+  return (
+    <tr id={id} className="border-b border-border">
+      <td />
+      <td colSpan={5} className="px-4 pb-4 pt-1">
+        <div className="flex flex-col gap-3 rounded-lg border border-border bg-muted/30 p-4">
+          {status === "error" ? (
+            <div className="flex items-center gap-3 text-sm text-muted-foreground">
+              <span>Não foi possível carregar o teste.</span>
+              <button type="button" onClick={onRetry} className="cursor-pointer text-xs font-medium text-brand hover:underline">
+                Tentar de novo
+              </button>
+            </div>
+          ) : !template ? (
+            <p className="text-sm text-muted-foreground">
+              {status === "ready" ? "O conteúdo deste teste não está disponível." : "Carregando o teste..."}
+            </p>
+          ) : (
+            <>
+              <TemplateBlock label="Descrição" html={template.description} emptyLabel="Sem descrição." />
+              <TemplateBlock label="Pré-requisitos" html={template.preconditions} emptyLabel="Não definido." />
+              <TemplateBlock label="Passos para reprodução" html={template.reproSteps} emptyLabel="Não definido." />
+              <TemplateBlock label="Resultado esperado" html={template.expectedResult} emptyLabel="Não definido." />
+            </>
+          )}
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+/** O endereço da barra aponta pro último teste aberto (dá pra copiar e mandar). Preserva o state do router. */
+function setCaseHash(seq: number | null) {
+  const base = window.location.pathname + window.location.search;
+  window.history.replaceState(window.history.state, "", seq === null ? base : `${base}#caso-${seq}`);
+}
+
+function ReportContent({ data, evidences, token }: { data: PublicReportData; evidences: PublicEvidence[]; token: string }) {
   const { run, cases, suites, defects } = data;
+  const allCases = React.useMemo(() => cases ?? [], [cases]);
+  // Abre já com o teste do endereço (#caso-154), se houver.
+  const [expanded, setExpanded] = React.useState<ReadonlySet<string>>(() => {
+    const match = /^#caso-(\d+)$/.exec(window.location.hash);
+    const target = match ? (cases ?? []).find((c) => c.seq === Number(match[1])) : undefined;
+    return new Set(target ? [target.id] : []);
+  });
+  const [templates, setTemplates] = React.useState<{ status: TemplatesStatus; byKey: Map<string, CaseTemplate> }>({
+    status: "idle",
+    byKey: new Map(),
+  });
+  const templatesRequested = React.useRef(false);
+
+  // O conteúdo de TODOS os testes vem num pedido só, no primeiro clique, e fica guardado: a página abre
+  // tão leve quanto antes, e as aberturas seguintes são instantâneas.
+  const loadTemplates = React.useCallback(async () => {
+    if (templatesRequested.current) return;
+    templatesRequested.current = true;
+    setTemplates((t) => ({ ...t, status: "loading" }));
+    try {
+      const response = await fetch(`/api/report-cases?token=${encodeURIComponent(token)}`);
+      if (!response.ok) throw new Error(String(response.status));
+      const body = (await response.json()) as { cases?: CaseTemplate[] };
+      if (!Array.isArray(body.cases)) throw new Error("resposta inesperada");
+      setTemplates({ status: "ready", byKey: indexTemplates(body.cases) });
+    } catch {
+      templatesRequested.current = false; // deixa "Tentar de novo" pedir outra vez
+      setTemplates((t) => ({ ...t, status: "error" }));
+    }
+  }, [token]);
+
+  // Link direto: se a página abriu com #caso-N, busca o conteúdo e rola até o teste.
+  React.useEffect(() => {
+    if (expanded.size === 0) return;
+    void loadTemplates();
+    const match = /^#caso-(\d+)$/.exec(window.location.hash);
+    if (match) requestAnimationFrame(() => document.getElementById(`caso-${match[1]}`)?.scrollIntoView({ block: "start" }));
+    // Só na abertura da página: depois disso quem decide o que abre são os cliques.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function toggleCase(c: PublicRunCase) {
+    const opening = !expanded.has(c.id);
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (opening) next.add(c.id);
+      else next.delete(c.id);
+      return next;
+    });
+    if (opening) {
+      void loadTemplates();
+      setCaseHash(c.seq);
+    } else if (window.location.hash === `#caso-${c.seq}`) {
+      setCaseHash(null);
+    }
+  }
+  const allExpanded = allCases.length > 0 && allCases.every((c) => expanded.has(c.id));
+  function toggleAll() {
+    setCaseHash(null);
+    if (allExpanded) {
+      setExpanded(new Set());
+    } else {
+      setExpanded(new Set(allCases.map((c) => c.id)));
+      void loadTemplates();
+    }
+  }
   const evidenceIndex = React.useMemo(() => indexEvidences(evidences), [evidences]);
   const [gallery, setGallery] = React.useState<{ items: PublicEvidence[]; title: string; trigger: HTMLElement } | null>(null);
   const closeGallery = React.useCallback(() => setGallery(null), []);
@@ -482,6 +658,13 @@ function ReportContent({ data, evidences }: { data: PublicReportData; evidences:
         </div>
       )}
 
+      {allCases.length > 0 && (
+        <div className="-mb-3 flex justify-end">
+          <button type="button" onClick={toggleAll} className="cursor-pointer text-xs font-medium text-brand hover:underline">
+            {allExpanded ? "Recolher tudo" : "Expandir tudo"}
+          </button>
+        </div>
+      )}
       <div className="rounded-xl border border-border bg-card overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
@@ -502,13 +685,30 @@ function ReportContent({ data, evidences }: { data: PublicReportData; evidences:
                     {g.title} <span className="font-normal">({g.cases.length})</span>
                   </td>
                 </tr>
-                {g.cases.map((c) => (
+                {g.cases.map((c) => {
+                  const isOpen = expanded.has(c.id);
+                  return (
                   <React.Fragment key={c.id}>
-                    <tr className="border-b border-border">
+                    <tr id={`caso-${c.seq}`} className="scroll-mt-4 border-b border-border">
                       <td className="px-4 py-2 font-mono-table text-xs text-muted-foreground">
                         {run.project_code}-{c.seq}
                       </td>
-                      <td className="px-4 py-2 font-medium">{c.title}</td>
+                      <td className="px-4 py-2 font-medium">
+                        <button
+                          type="button"
+                          aria-expanded={isOpen}
+                          aria-controls={`caso-${c.seq}-teste`}
+                          onClick={() => toggleCase(c)}
+                          className="group flex w-full cursor-pointer items-start gap-1.5 text-left"
+                        >
+                          <ChevronRight
+                            size={14}
+                            aria-hidden
+                            className={cn("mt-1 shrink-0 text-muted-foreground transition-transform", isOpen && "rotate-90")}
+                          />
+                          <span className="group-hover:underline">{c.title}</span>
+                        </button>
+                      </td>
                       <td className="px-4 py-2">
                         <Badge variant={statusBadgeVariant(c.priority)}>{statusLabel(c.priority)}</Badge>
                       </td>
@@ -537,8 +737,17 @@ function ReportContent({ data, evidences }: { data: PublicReportData; evidences:
                         </td>
                       </tr>
                     )}
+                    {isOpen && (
+                      <TemplateRow
+                        id={`caso-${c.seq}-teste`}
+                        status={templates.status}
+                        template={templates.byKey.get(c.id) ?? templates.byKey.get(c.case_id)}
+                        onRetry={() => void loadTemplates()}
+                      />
+                    )}
                   </React.Fragment>
-                ))}
+                  );
+                })}
               </React.Fragment>
             ))}
           </tbody>
