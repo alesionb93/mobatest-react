@@ -20,7 +20,21 @@ interface PlanModalProps {
   onDelete: (id: string) => Promise<void>;
 }
 
-function PlanModal({ open, onClose, existing, suites, cases, projectCode, onSave, onDelete }: PlanModalProps) {
+/**
+ * A página mantém o PlanModal SEMPRE montado e só troca as props (open, existing). Por isso o formulário
+ * abaixo é montado a cada abertura: o estado dele (título, descrição e casos marcados) é calculado a partir
+ * do plano na hora em que o modal abre.
+ *
+ * Antes, esse estado era calculado uma vez só, na primeira renderização da página — quando ainda não existia
+ * plano nenhum. Resultado: a edição abria vazia, o que digitado numa abertura aparecia na seguinte, e salvar
+ * gravava só o que estivesse marcado na tela (apagando os casos que o plano já tinha).
+ */
+function PlanModal(props: PlanModalProps) {
+  if (!props.open) return null;
+  return <PlanModalForm key={props.existing?.id ?? "new"} {...props} />;
+}
+
+function PlanModalForm({ open, onClose, existing, suites, cases, projectCode, onSave, onDelete }: PlanModalProps) {
   const [title, setTitle] = React.useState(existing?.title ?? "");
   const [description, setDescription] = React.useState(existing?.description ?? "");
   const [selectedIds, setSelectedIds] = React.useState<Set<string>>(
