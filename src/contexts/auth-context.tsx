@@ -21,16 +21,27 @@ const AuthContext = React.createContext<AuthContextValue | undefined>(undefined)
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = React.useState<Session | null>(null);
+  // O `user` só muda de REFERÊNCIA quando muda a pessoa (ou o cadastro dela). O Supabase re-emite o login (SIGNED_IN /
+  // TOKEN_REFRESHED) com uma sessão nova toda vez que a aba volta ao foco e a cada renovação do token (~1h). Se o `user`
+  // virasse um objeto novo a cada vez, o ProjectProvider recarregaria os projetos, a tela inteira trocaria por um
+  // esqueleto de "carregando" e tudo o que estava aberto (o teste em execução e o contador) sumiria. A `session` continua
+  // sendo atualizada normalmente, então o token novo chega a quem precisa dele.
+  const [user, setUser] = React.useState<User | null>(null);
   const [loading, setLoading] = React.useState(true);
 
   React.useEffect(() => {
+    const applySession = (next: Session | null) => {
+      setSession(next);
+      setUser((prev) => (isSameUser(prev, next?.user ?? null) ? prev : (next?.user ?? null)));
+    };
+
     supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
+      applySession(data.session);
       setLoading(false);
     });
 
     const { data: subscription } = supabase.auth.onAuthStateChange((_event, newSession) => {
-      setSession(newSession);
+      applySession(newSession);
     });
 
     return () => subscription.subscription.unsubscribe();
@@ -68,7 +79,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const value: AuthContextValue = {
     session,
-    user: session?.user ?? null,
+    user,
     loading,
     signIn,
     signUp,
@@ -84,6 +95,11 @@ export function useAuth() {
   const ctx = React.useContext(AuthContext);
   if (!ctx) throw new Error("useAuth precisa estar dentro de <AuthProvider>");
   return ctx;
+}
+
+/** Mesma pessoa e mesmo cadastro (o `updated_at` só muda quando o cadastro muda, não quando o token é renovado). */
+function isSameUser(a: User | null, b: User | null): boolean {
+  return a?.id === b?.id && a?.updated_at === b?.updated_at;
 }
 
 function traduzErro(message: string): string {

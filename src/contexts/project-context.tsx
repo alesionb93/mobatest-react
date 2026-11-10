@@ -31,14 +31,19 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
     () => localStorage.getItem(STORAGE_KEY)
   );
   const [loading, setLoading] = React.useState(true);
+  const hasLoadedRef = React.useRef(false);
 
   const loadProjects = React.useCallback(async () => {
     if (!user) {
+      hasLoadedRef.current = false;
       setProjects([]);
       setLoading(false);
       return;
     }
-    setLoading(true);
+    // Só a PRIMEIRA carga troca a tela por um esqueleto. As seguintes (voltar pra aba, renovar o token, atualizar a
+    // lista depois de criar um projeto) são silenciosas: mantêm a lista que já está na tela, e a página aberta não é
+    // desmontada (RequireProject troca o conteúdo por um esqueleto enquanto `loading` for verdadeiro).
+    if (!hasLoadedRef.current) setLoading(true);
     // Membros só ficam listados aqui enquanto is_active = true (perderam acesso
     // se desativados, mas o histórico deles no projeto continua preservado).
     const { data, error } = await supabase
@@ -49,7 +54,8 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
 
     if (error) {
       console.error("Erro ao carregar projetos do usuário:", error.message);
-      setProjects([]);
+      // Numa recarga silenciosa, uma falha de rede NÃO esvazia a lista (senão a pessoa seria jogada na tela de "sem projeto").
+      if (!hasLoadedRef.current) setProjects([]);
       setLoading(false);
       return;
     }
@@ -70,6 +76,7 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
 
     setProjects(list);
     setLoading(false);
+    hasLoadedRef.current = true;
   }, [user]);
 
   React.useEffect(() => {

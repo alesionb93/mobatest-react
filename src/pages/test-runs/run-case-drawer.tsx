@@ -12,6 +12,7 @@ import { useAuth } from "@/contexts/auth-context";
 import { useProject } from "@/contexts/project-context";
 import { statusBadgeVariant, statusLabel } from "@/lib/labels";
 import { formatMMSS } from "@/pages/test-runs/run-helpers";
+import { useCaseTimer } from "@/pages/test-runs/use-case-timer";
 import { AddBugModal } from "@/pages/test-runs/add-bug-modal";
 import { MaestroLogView } from "@/pages/test-runs/maestro-log-view";
 import { isInfraFailure } from "@/lib/maestro-log";
@@ -80,7 +81,6 @@ function RunCaseDrawer({
     { status: RunCaseResultStatus; executed_at: string | null; test_runs: { title: string; environment: string | null } | null }[]
   >([]);
   const [loading, setLoading] = React.useState(true);
-  const [elapsed, setElapsed] = React.useState(0);
   const [addBugOpen, setAddBugOpen] = React.useState(false);
   const [bugModalKey, setBugModalKey] = React.useState(0);
   const [runningAutomated, setRunningAutomated] = React.useState(false);
@@ -92,15 +92,20 @@ function RunCaseDrawer({
   const [showLog, setShowLog] = React.useState(false);
   const [attempts, setAttempts] = React.useState<RunCaseAttempt[] | null>(null);
   const [retestMode, setRetestMode] = React.useState(false);
-  const openedAtRef = React.useRef(Date.now());
   const activeJobIdRef = React.useRef<string | null>(null);
+  // O tempo do caso. Fechar o drawer (mesmo sem querer) pausa e guarda; reabrir segue de onde parou. Só vale enquanto o
+  // caso ainda pode receber resultado (o mesmo critério do relógio na tela).
+  const timer = useCaseTimer({
+    open,
+    runCaseId,
+    userId: user?.id ?? null,
+    persist: rc !== null && rc.id === runCaseId && (rc.status === "untested" || retestMode),
+  });
 
   React.useEffect(() => {
     if (!open || !runCaseId) return;
     setLoading(true);
     setTab("execution");
-    openedAtRef.current = Date.now();
-    setElapsed(0);
     // Esses precisam resetar por caso — sem isso, o modo de reteste (e o
     // log/print da última automação) ficava "preso" do caso anterior e
     // parecia que o recurso tinha parado de funcionar depois do 1º uso.
@@ -139,12 +144,6 @@ function RunCaseDrawer({
       });
   }, [open, runCaseId]);
 
-  React.useEffect(() => {
-    if (!open) return;
-    const interval = setInterval(() => setElapsed(Math.floor((Date.now() - openedAtRef.current) / 1000)), 1000);
-    return () => clearInterval(interval);
-  }, [open]);
-
   // Se trocar de caso (o componente remonta, já que a key muda) com um teste
   // automatizado ainda rodando, avisa o agente pra matar o processo também —
   // sem isso, ele ficaria rodando escondido, controlando o celular sozinho.
@@ -175,7 +174,7 @@ function RunCaseDrawer({
     source: "manual" | "automated" = "manual"
   ) {
     if (!rc || !user) return;
-    const durationSeconds = Math.round((Date.now() - openedAtRef.current) / 1000);
+    const durationSeconds = timer.getElapsedSeconds();
     const { error } = await updateRunCaseStatus(
       rc.id,
       {
@@ -191,6 +190,9 @@ function RunCaseDrawer({
       toast.error(error);
       return;
     }
+
+    // Resultado gravado: o tempo guardado deste caso não vale mais (a próxima tentativa começa do zero).
+    timer.reset();
 
     await onStatusApplied();
 
@@ -343,7 +345,7 @@ function RunCaseDrawer({
                     Marcar resultado
                   </span>
                   {(rc.status === "untested" || retestMode) && (
-                    <span className="font-mono-table text-xs text-muted-foreground">⏱ {formatMMSS(elapsed)}</span>
+                    <span className="font-mono-table text-xs text-muted-foreground">⏱ {formatMMSS(timer.elapsedSeconds)}</span>
                   )}
                 </div>
 
@@ -358,8 +360,7 @@ function RunCaseDrawer({
                     </div>
                     <button
                       onClick={() => {
-                        openedAtRef.current = Date.now();
-                        setElapsed(0);
+                        timer.restart();
                         setRetestMode(true);
                       }}
                       className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-foreground hover:bg-muted shrink-0"
