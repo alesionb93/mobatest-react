@@ -1,5 +1,6 @@
 /**
  * Compressão de evidência (foto/vídeo) feita no próprio navegador, ANTES do upload.
+ * PDF também é aceito como evidência, mas NÃO é comprimido: só é conferido (é um PDF de verdade? cabe no limite?).
  *
  * Por quê: o Storage do Supabase tem cota pequena e cada print/vídeo de celular
  * costuma ter de 1 a 30 MB. Comprimindo aqui, o que sobe é uma fração disso.
@@ -16,6 +17,8 @@ export const EVIDENCE_LIMITS = {
   maxOutputBytes: 25 * 1024 * 1024,
   /** Se não der pra comprimir, só sobe o original se ele for pequeno assim. */
   uncompressedFallbackBytes: 10 * 1024 * 1024,
+  /** PDF não é comprimido: sobe como está, então este é o teto dele. */
+  maxPdfBytes: 25 * 1024 * 1024,
 
   /** Foto: lado maior em pixels (screenshot de celular 1080x2400 vira ~720x1600, ainda legível). */
   imageMaxSide: 1600,
@@ -35,6 +38,18 @@ export const EVIDENCE_LIMITS = {
 /** Quanto do vídeo pode faltar na versão comprimida: o maior entre 1s e 10% (início/fim da gravação perdem uns décimos). */
 function allowedLossSeconds(durationSeconds: number): number {
   return Math.max(1, durationSeconds * 0.1);
+}
+
+const PDF_TYPE = "application/pdf";
+
+/** PDF pelo tipo, ou pela extensão quando o navegador não informa o tipo (acontece com alguns arquivos arrastados). */
+export function isPdfFile(file: { name: string; type: string }): boolean {
+  return file.type === PDF_TYPE || (file.type === "" && /\.pdf$/i.test(file.name));
+}
+
+/** O que pode virar evidência: foto, vídeo ou PDF. */
+export function isEvidenceFile(file: { name: string; type: string }): boolean {
+  return file.type.startsWith("image/") || file.type.startsWith("video/") || isPdfFile(file);
 }
 
 export interface CompressedMedia {
@@ -68,6 +83,30 @@ function keepOriginal(file: File): CompressedMedia {
     blob: file,
     fileName: file.name,
     fileType: file.type || "application/octet-stream",
+    originalSize: file.size,
+    size: file.size,
+    compressed: false,
+  };
+}
+
+/**
+ * PDF não é comprimido (não há como recomprimir um PDF no navegador sem uma biblioteca pesada). Só confere que o
+ * arquivo não está vazio, que cabe no limite e que é um PDF de verdade, e não outra coisa renomeada pra .pdf.
+ */
+async function acceptPdf(file: File): Promise<CompressedMedia> {
+  if (file.size === 0) throw new MediaCompressionError(`"${file.name}" está vazio.`);
+  const maxMb = Math.round(EVIDENCE_LIMITS.maxPdfBytes / (1024 * 1024));
+  if (file.size > EVIDENCE_LIMITS.maxPdfBytes) {
+    throw new MediaCompressionError(`"${file.name}" passa de ${maxMb} MB. PDF não é comprimido: reduza o arquivo e tente de novo.`);
+  }
+  // Um PDF de verdade tem "%PDF-" no começo (a especificação aceita até 1024 bytes antes dele).
+  const head = await file.slice(0, 1024).text();
+  if (!head.includes("%PDF-")) throw new MediaCompressionError(`"${file.name}" não parece ser um PDF válido.`);
+  return {
+    // Se o navegador não informou o tipo (só a extensão), o arquivo sobe já com o tipo certo.
+    blob: file.type === PDF_TYPE ? file : file.slice(0, file.size, PDF_TYPE),
+    fileName: file.name,
+    fileType: PDF_TYPE,
     originalSize: file.size,
     size: file.size,
     compressed: false,
@@ -321,9 +360,9 @@ async function compressVideo(file: File, onProgress?: CompressProgress): Promise
 // ---------------------------------------------------------------------------
 
 /**
- * Comprime uma foto ou vídeo pra virar evidência. Devolve sempre o menor entre
- * o original e o comprimido. Lança MediaCompressionError (mensagem pronta pra
- * tela) se o arquivo não puder ser aceito.
+ * Prepara uma foto, um vídeo ou um PDF pra virar evidência. Foto e vídeo são comprimidos (devolve sempre o menor
+ * entre o original e o comprimido); PDF sobe como está, depois de conferido. Lança MediaCompressionError (mensagem
+ * pronta pra tela) se o arquivo não puder ser aceito.
  */
 export async function compressEvidence(file: File, onProgress?: CompressProgress): Promise<CompressedMedia> {
   if (file.size > EVIDENCE_LIMITS.maxInputBytes) {
@@ -332,10 +371,12 @@ export async function compressEvidence(file: File, onProgress?: CompressProgress
     );
   }
 
+  if (isPdfFile(file)) return acceptPdf(file);
+
   const isImage = file.type.startsWith("image/");
   const isVideo = file.type.startsWith("video/");
   if (!isImage && !isVideo) {
-    throw new MediaCompressionError(`"${file.name}" não é foto nem vídeo.`);
+    throw new MediaCompressionError(`"${file.name}" não é foto, vídeo nem PDF.`);
   }
 
   let result: CompressedMedia;

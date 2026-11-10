@@ -1,13 +1,13 @@
 import * as React from "react";
 import { toast } from "sonner";
-import { ImagePlus, Film, Play, Paperclip, Trash2, Loader2 } from "lucide-react";
+import { ImagePlus, Film, FileText, Play, Paperclip, Trash2, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { useAuth } from "@/contexts/auth-context";
 import { useProject } from "@/contexts/project-context";
 import { formatBytes } from "@/lib/format";
-import { compressEvidence, MediaCompressionError } from "@/lib/media-compress";
+import { compressEvidence, isEvidenceFile, isPdfFile, MediaCompressionError } from "@/lib/media-compress";
 import { listEvidences, uploadEvidence, deleteEvidence, getEvidenceUrl } from "@/lib/run-case-evidences";
 import type { RunCaseEvidence } from "@/types/test-runs";
 
@@ -29,8 +29,11 @@ function EvidenceThumb({ evidence }: { evidence: RunCaseEvidence }) {
   const [url, setUrl] = React.useState<string | null>(null);
   const isImage = evidence.file_type.startsWith("image/");
   const isVideo = evidence.file_type.startsWith("video/");
+  const isPdf = evidence.file_type === "application/pdf";
 
   React.useEffect(() => {
+    // PDF não tem prévia: não precisa do link assinado pra mostrar a miniatura (o link só é pedido ao clicar).
+    if (isPdf) return;
     let alive = true;
     getEvidenceUrl(evidence.storage_path, 3600).then((u) => {
       if (alive) setUrl(u);
@@ -38,8 +41,16 @@ function EvidenceThumb({ evidence }: { evidence: RunCaseEvidence }) {
     return () => {
       alive = false;
     };
-  }, [evidence.storage_path]);
+  }, [evidence.storage_path, isPdf]);
 
+  if (isPdf) {
+    return (
+      <div className="flex h-full w-full flex-col items-center justify-center gap-1 text-muted-foreground">
+        <FileText size={28} />
+        <span className="text-[10px] font-semibold tracking-wide">PDF</span>
+      </div>
+    );
+  }
   if (!url) return <div className="h-full w-full animate-pulse bg-muted" />;
   if (isImage) return <img src={url} alt={evidence.file_name} className="h-full w-full object-cover" />;
   if (isVideo) {
@@ -76,10 +87,10 @@ interface RunCaseEvidencesProps {
 }
 
 /**
- * Evidências (foto/vídeo) do caso dentro da execução. Funciona em qualquer
+ * Evidências (foto, vídeo ou PDF) do caso dentro da execução. Funciona em qualquer
  * status — antes ou depois de marcar o resultado — porque fica presa ao caso
  * da execução (test_run_case_id), não ao status. Foto e vídeo são comprimidos
- * no navegador antes de subir (ver lib/media-compress.ts).
+ * no navegador antes de subir; PDF sobe como está (ver lib/media-compress.ts).
  */
 function RunCaseEvidences({ runCaseId }: RunCaseEvidencesProps) {
   const { user } = useAuth();
@@ -109,7 +120,7 @@ function RunCaseEvidences({ runCaseId }: RunCaseEvidencesProps) {
     async (file: File, id: number) => {
       if (!activeProject || !user) return;
       const patch = (p: Partial<Job>) => setJobs((js) => js.map((j) => (j.id === id ? { ...j, ...p } : j)));
-      patch({ phase: "compressing", progress: file.type.startsWith("video/") ? 0 : null });
+      patch({ phase: isPdfFile(file) ? "uploading" : "compressing", progress: file.type.startsWith("video/") ? 0 : null });
       try {
         const media = await compressEvidence(file, (ratio) => patch({ progress: ratio }));
         patch({ phase: "uploading", progress: null });
@@ -156,12 +167,11 @@ function RunCaseEvidences({ runCaseId }: RunCaseEvidencesProps) {
       if (target && (target.closest("input, textarea, select") || target.isContentEditable)) return;
       // Com um modal aberto por cima (ex: criar defeito), o Ctrl+V não é pra cá.
       if (document.querySelector('[role="dialog"][aria-modal="true"]')) return;
-      const files = Array.from(e.clipboardData?.files ?? []).filter(
-        (f) => f.type.startsWith("image/") || f.type.startsWith("video/")
-      );
+      const files = Array.from(e.clipboardData?.files ?? []).filter(isEvidenceFile);
       if (files.length === 0) return;
       e.preventDefault();
-      addFiles(files.map((f, i) => new File([f], pastedFileName(f, i), { type: f.type })));
+      // Print colado chega sempre como "image.png": ganha um nome com data. PDF copiado de uma pasta já traz o nome real.
+      addFiles(files.map((f, i) => (isPdfFile(f) ? f : new File([f], pastedFileName(f, i), { type: f.type }))));
     }
     document.addEventListener("paste", onPaste);
     return () => document.removeEventListener("paste", onPaste);
@@ -191,11 +201,9 @@ function RunCaseEvidences({ runCaseId }: RunCaseEvidencesProps) {
   function handleDrop(e: React.DragEvent) {
     e.preventDefault();
     setDragging(false);
-    const files = Array.from(e.dataTransfer.files).filter(
-      (f) => f.type.startsWith("image/") || f.type.startsWith("video/")
-    );
+    const files = Array.from(e.dataTransfer.files).filter(isEvidenceFile);
     if (files.length === 0) {
-      toast.error("Só foto ou vídeo.");
+      toast.error("Só foto, vídeo ou PDF.");
       return;
     }
     addFiles(files);
@@ -228,11 +236,11 @@ function RunCaseEvidences({ runCaseId }: RunCaseEvidencesProps) {
         <div className="flex flex-wrap items-center gap-3">
           <label className="inline-flex items-center gap-2 rounded-lg border border-input bg-card px-3 py-2 text-sm font-medium cursor-pointer hover:bg-secondary w-fit">
             <ImagePlus size={14} />
-            Adicionar foto ou vídeo
+            Adicionar foto, vídeo ou PDF
             <input
               ref={inputRef}
               type="file"
-              accept="image/*,video/*"
+              accept="image/*,video/*,application/pdf"
               multiple
               className="hidden"
               onChange={(e) => {
@@ -243,7 +251,7 @@ function RunCaseEvidences({ runCaseId }: RunCaseEvidencesProps) {
           </label>
           <p className="text-xs text-muted-foreground flex-1 min-w-[200px]">
             Também dá pra colar um print (Ctrl+V) ou arrastar o arquivo aqui. Foto e vídeo são comprimidos antes de
-            enviar.
+            enviar; PDF sobe como está (até 25 MB).
           </p>
         </div>
 
@@ -289,6 +297,7 @@ function RunCaseEvidences({ runCaseId }: RunCaseEvidencesProps) {
                 </button>
                 <p className="mt-1 truncate text-xs text-muted-foreground" title={ev.file_name}>
                   {ev.file_type.startsWith("video/") && <Film size={11} className="mr-1 inline -mt-0.5" />}
+                  {ev.file_type === "application/pdf" && <FileText size={11} className="mr-1 inline -mt-0.5" />}
                   {ev.file_name} · {formatBytes(ev.file_size)}
                 </p>
                 <button

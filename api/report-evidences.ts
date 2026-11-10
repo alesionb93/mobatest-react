@@ -3,7 +3,7 @@
  *
  *   GET /api/report-evidences?token=<report_token>
  *
- * Por quê existe: as fotos e vídeos ficam num bucket PRIVADO do Supabase, e quem abre o link
+ * Por quê existe: as fotos, vídeos e PDFs ficam num bucket PRIVADO do Supabase, e quem abre o link
  * público não tem login — o navegador dele não consegue abrir os arquivos. Em vez de abrir o
  * bucket (o que expõe TODAS as evidências e anexos do sistema), esta função faz o papel de
  * porteiro, no servidor:
@@ -29,6 +29,13 @@ const LINK_TTL_SECONDS = 3600;
 const MAX_EVIDENCES = 300;
 /** Ids por consulta: a lista vai na URL, e 100 UUIDs já são ~4 KB. */
 const IDS_PER_QUERY = 100;
+/**
+ * Tipos de arquivo que vão pra um relatório público: foto, vídeo e PDF. É uma lista de PERMISSÃO: qualquer outro tipo
+ * que um dia seja aceito como evidência fica de fora do link público até alguém decidir o contrário.
+ */
+export function isPublicEvidenceType(fileType: string): boolean {
+  return fileType.startsWith("image/") || fileType.startsWith("video/") || fileType === "application/pdf";
+}
 /** Só letras, números e hífen: cobre UUID e qualquer outro formato de token, e barra o resto. */
 const TOKEN_PATTERN = /^[A-Za-z0-9-]{8,64}$/;
 
@@ -104,10 +111,8 @@ export async function buildEvidenceResponse(db: SupabaseClient, token: string | 
     if (res.error) throw res.error;
     rows.push(...((res.data ?? []) as EvidenceRow[]));
   }
-  // Só foto e vídeo vão pra um relatório público.
-  const media = rows
-    .filter((r) => r.file_type.startsWith("image/") || r.file_type.startsWith("video/"))
-    .slice(0, MAX_EVIDENCES);
+  // Só foto, vídeo e PDF vão pra um relatório público (ver isPublicEvidenceType).
+  const media = rows.filter((r) => isPublicEvidenceType(r.file_type)).slice(0, MAX_EVIDENCES);
   if (media.length === 0) return { status: 200, body: { evidences: [] } };
 
   // 4) Links temporários. Um arquivo que não foi possível assinar (ex: sumiu do Storage) é

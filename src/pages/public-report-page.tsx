@@ -1,5 +1,5 @@
 import * as React from "react";
-import { ChevronLeft, ChevronRight, ExternalLink, Play, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, ExternalLink, FileText, Play, X } from "lucide-react";
 import DOMPurify from "dompurify";
 import { useSearchParams } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
@@ -34,7 +34,7 @@ interface PublicDefect {
   status: string;
   test_run_case_id: string | null;
 }
-/** Evidência (foto/vídeo) devolvida por /api/report-evidences, já com link temporário. */
+/** Evidência (foto, vídeo ou PDF) devolvida por /api/report-evidences, já com link temporário. */
 interface PublicEvidence {
   id: string;
   testRunCaseId: string;
@@ -280,8 +280,8 @@ function EvidenceCell({
 }
 
 /**
- * Galeria das evidências de um caso: imagem/vídeo grande, contador, setas (← →), miniaturas pra
- * pular e link pro original. Esc ou clique fora fecha. Só carrega os arquivos quando abre.
+ * Galeria das evidências de um caso: imagem/vídeo grande (ou um cartão com o botão "Abrir PDF"), contador,
+ * setas (← →), miniaturas pra pular e link pro original. Esc ou clique fora fecha. Só carrega os arquivos quando abre.
  */
 function EvidenceGallery({
   items,
@@ -300,6 +300,7 @@ function EvidenceGallery({
   const last = items.length - 1;
   const current = items[index];
   const isVideo = current.contentType.startsWith("video/");
+  const isPdf = current.contentType === "application/pdf";
 
   const go = React.useCallback((delta: number) => setIndex((i) => Math.min(last, Math.max(0, i + delta))), [last]);
 
@@ -399,6 +400,22 @@ function EvidenceGallery({
               onError={() => markFailed(current.id)}
               className="max-h-[65vh] max-w-full rounded-md bg-black"
             />
+          ) : isPdf ? (
+            // PDF não cabe numa <img> nem num <video>: vira um cartão, e o arquivo abre numa aba nova.
+            <div key={current.id} className="flex max-w-sm flex-col items-center gap-3 px-12 text-center text-white">
+              <FileText size={64} className="text-white/80" />
+              <p className="break-words text-sm font-medium">{current.fileName}</p>
+              <p className="text-xs text-white/60">PDF · {formatBytes(current.fileSize)}</p>
+              <a
+                href={current.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 rounded-md bg-brand px-3 py-2 text-sm font-medium text-white hover:opacity-90"
+              >
+                <ExternalLink size={14} />
+                Abrir PDF
+              </a>
+            </div>
           ) : (
             <img
               key={current.id}
@@ -430,6 +447,11 @@ function EvidenceGallery({
                 {e.contentType.startsWith("video/") ? (
                   <span className="flex h-full w-full items-center justify-center text-white/80">
                     <Play size={16} />
+                  </span>
+                ) : e.contentType === "application/pdf" ? (
+                  <span className="flex h-full w-full flex-col items-center justify-center gap-0.5 text-white/80">
+                    <FileText size={16} />
+                    <span className="text-[9px] font-semibold">PDF</span>
                   </span>
                 ) : (
                   <img src={e.url} alt="" loading="lazy" className="h-full w-full object-cover" />
