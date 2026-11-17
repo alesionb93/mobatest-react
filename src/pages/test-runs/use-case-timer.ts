@@ -7,6 +7,9 @@ import * as React from "react";
  *   onde parou. O tempo com o drawer fechado não conta.
  * - O que vira "duração" do caso é esse tempo acumulado, e não "agora menos a hora em que o drawer abriu".
  * - Só vale pra um caso que ainda pode receber resultado (não testado, ou em reteste); num caso já testado nada é guardado.
+ * - O tempo guardado é de UMA tentativa (`attempt`). Se o resultado daquela tentativa foi gravado por outro caminho
+ *   (uma falha da automação, uma execução em lote), o tempo que ficou pra trás é de uma tentativa que já acabou e é
+ *   descartado: o reteste seguinte começa do zero, em vez de herdar um tempo velho.
  * - A conta é feita com `Date.now()`, então um navegador que atrasa os timers numa aba em segundo plano não perde tempo.
  */
 
@@ -16,20 +19,24 @@ const MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
 
 const storageKey = (userId: string, runCaseId: string) => `${PREFIX}${userId}:${runCaseId}`;
 
-function readSaved(key: string): number {
+/** O tempo guardado pra esta tentativa. Uma entrada de outra tentativa não vale (uma sem `attempt` é de uma versão antiga e vale). */
+function readSaved(key: string, attempt: number): number {
   try {
     const raw = localStorage.getItem(key);
     if (!raw) return 0;
-    const value = (JSON.parse(raw) as { elapsedMs?: unknown }).elapsedMs;
-    return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : 0;
+    const saved = JSON.parse(raw) as { elapsedMs?: unknown; attempt?: unknown };
+    if (typeof saved.attempt === "number" && saved.attempt !== attempt) return 0;
+    return typeof saved.elapsedMs === "number" && Number.isFinite(saved.elapsedMs) && saved.elapsedMs > 0
+      ? saved.elapsedMs
+      : 0;
   } catch {
     return 0;
   }
 }
 
-function writeSaved(key: string, elapsedMs: number) {
+function writeSaved(key: string, elapsedMs: number, attempt: number) {
   try {
-    localStorage.setItem(key, JSON.stringify({ elapsedMs, savedAt: Date.now() }));
+    localStorage.setItem(key, JSON.stringify({ elapsedMs, savedAt: Date.now(), attempt }));
   } catch {
     // Sem espaço ou navegador bloqueando o armazenamento: o relógio segue funcionando, só não sobrevive ao fechar.
   }
@@ -67,14 +74,20 @@ interface UseCaseTimerArgs {
   userId: string | null;
   /** O caso ainda pode receber resultado (não testado ou em reteste)? Só então o tempo é guardado e retomado. */
   persist: boolean;
+  /**
+   * Qual tentativa está em andamento: 0 é a primeira; cada reteste concluído soma 1. Quem chama calcula (ver o drawer).
+   * É o que impede um tempo velho de ser retomado numa tentativa nova.
+   */
+  attempt: number;
 }
 
-export function useCaseTimer({ open, runCaseId, userId, persist }: UseCaseTimerArgs) {
+export function useCaseTimer({ open, runCaseId, userId, persist, attempt }: UseCaseTimerArgs) {
   const [elapsedSeconds, setElapsedSeconds] = React.useState(0);
   const startRef = React.useRef(0); // 0 = ainda não abriu
   const carryRef = React.useRef(0);
   const keyRef = React.useRef<string | null>(null);
   const persistRef = React.useRef(persist);
+  const attemptRef = React.useRef(attempt);
   const restoredRef = React.useRef(false);
   const suspendedRef = React.useRef(false);
 
@@ -96,7 +109,7 @@ export function useCaseTimer({ open, runCaseId, userId, persist }: UseCaseTimerA
     pruneOld();
 
     const save = () => {
-      if (persistRef.current && !suspendedRef.current) writeSaved(key, totalMs());
+      if (persistRef.current && !suspendedRef.current) writeSaved(key, totalMs(), attemptRef.current);
     };
     const tick = () => {
       setElapsedSeconds(Math.floor(totalMs() / 1000));
@@ -121,17 +134,18 @@ export function useCaseTimer({ open, runCaseId, userId, persist }: UseCaseTimerA
   // parou. Roda DEPOIS do efeito acima (declarado antes), inclusive quando o mesmo caso é reaberto.
   React.useEffect(() => {
     persistRef.current = persist;
+    attemptRef.current = attempt;
     const key = keyRef.current;
     if (!persist || !key) return;
     suspendedRef.current = false;
     if (restoredRef.current) return;
     restoredRef.current = true;
-    const saved = readSaved(key);
+    const saved = readSaved(key, attempt);
     if (saved > 0) {
       carryRef.current = saved;
       setElapsedSeconds(Math.floor(totalMs() / 1000));
     }
-  }, [open, userId, runCaseId, persist, totalMs]);
+  }, [open, userId, runCaseId, persist, attempt, totalMs]);
 
   /** Os segundos a gravar como duração do caso. */
   const getElapsedSeconds = React.useCallback(() => Math.round(totalMs() / 1000), [totalMs]);
@@ -159,4 +173,12 @@ export function useCaseTimer({ open, runCaseId, userId, persist }: UseCaseTimerA
   }, []);
 
   return { elapsedSeconds, getElapsedSeconds, reset, restart };
+}
+
+/**
+ * A tentativa em andamento de um caso: 0 é a primeira; depois de um resultado, a tentativa em andamento é um reteste
+ * (1), e cada reteste concluído soma 1 em `retest_count`.
+ */
+export function currentAttempt(rc: { status: string; retest_count: number }): number {
+  return rc.retest_count + (rc.status === "untested" ? 0 : 1);
 }

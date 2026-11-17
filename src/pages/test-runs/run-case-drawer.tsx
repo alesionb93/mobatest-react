@@ -12,7 +12,7 @@ import { useAuth } from "@/contexts/auth-context";
 import { useProject } from "@/contexts/project-context";
 import { statusBadgeVariant, statusLabel } from "@/lib/labels";
 import { formatMMSS } from "@/pages/test-runs/run-helpers";
-import { useCaseTimer } from "@/pages/test-runs/use-case-timer";
+import { currentAttempt, useCaseTimer } from "@/pages/test-runs/use-case-timer";
 import { AddBugModal } from "@/pages/test-runs/add-bug-modal";
 import { MaestroLogView } from "@/pages/test-runs/maestro-log-view";
 import { isInfraFailure } from "@/lib/maestro-log";
@@ -100,6 +100,7 @@ function RunCaseDrawer({
     runCaseId,
     userId: user?.id ?? null,
     persist: rc !== null && rc.id === runCaseId && (rc.status === "untested" || retestMode),
+    attempt: rc ? currentAttempt(rc) : 0,
   });
 
   React.useEffect(() => {
