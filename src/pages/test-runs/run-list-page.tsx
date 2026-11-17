@@ -9,7 +9,7 @@ import { Modal } from "@/components/ui/modal";
 import { ProgressSegments } from "@/pages/test-runs/progress-segments";
 import { useTestRunsList } from "@/pages/test-runs/use-test-runs-list";
 import { NewRunModal } from "@/pages/test-runs/new-run-modal";
-import { statusBadgeVariant, statusLabel } from "@/lib/labels";
+import { runDisplayStatus, taskLabel } from "@/lib/run-review";
 
 function RunListPage() {
   const navigate = useNavigate();
@@ -59,13 +59,14 @@ function RunListPage() {
                     <div>
                       <div className="flex items-center gap-2">
                         <span className="font-semibold text-sm text-foreground">{r.title}</span>
+                        {r.task_ref && <Badge variant="neutral">{taskLabel(r.task_ref)}</Badge>}
                         {r.is_public && <Badge variant="info">Pública</Badge>}
                       </div>
                       <p className="text-xs text-muted-foreground mt-0.5">
                         {r.environment || "Sem ambiente definido"} · {new Date(r.created_at).toLocaleString("pt-BR")}
                       </p>
                     </div>
-                    <Badge variant={statusBadgeVariant(r.status)}>{statusLabel(r.status)}</Badge>
+                    <Badge variant={runDisplayStatus(r.status, r.review_outcome).variant}>{runDisplayStatus(r.status, r.review_outcome).label}</Badge>
                   </div>
 
                   <ProgressSegments statuses={r.test_run_cases.map((rc) => rc.status)} />

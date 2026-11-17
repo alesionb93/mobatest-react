@@ -1,22 +1,26 @@
-import { Share2, Download } from "lucide-react";
+import { Share2, Download, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { RunProgressDonut } from "@/pages/test-runs/run-progress-donut";
 import { formatDuration, formatElapsed, profileName } from "@/pages/test-runs/run-helpers";
-import { statusBadgeVariant, statusLabel } from "@/lib/labels";
+import { runDisplayStatus, taskLabel } from "@/lib/run-review";
 import type { TestRun, TestRunCase, Profile } from "@/types/test-runs";
 
 interface RunDetailSidebarProps {
   run: TestRun;
   runCases: TestRunCase[];
   profiles: Record<string, Profile>;
+  devName: string | null;
   onShare: () => void;
   onExport: () => void;
   onCancel: () => void;
   onComplete: () => void;
+  onEditReview: () => void;
+  onRerun: () => void;
 }
 
-function RunDetailSidebar({ run, runCases, profiles, onShare, onExport, onCancel, onComplete }: RunDetailSidebarProps) {
+function RunDetailSidebar({ run, runCases, profiles, devName, onShare, onExport, onCancel, onComplete, onEditReview, onRerun }: RunDetailSidebarProps) {
+  const display = runDisplayStatus(run.status, run.review_outcome);
   const total = runCases.length || 1;
   const executed = runCases.filter((rc) => rc.status && rc.status !== "untested").length;
   const totalDurationSeconds = runCases.reduce((sum, rc) => sum + (rc.duration_seconds ?? 0), 0);
@@ -32,6 +36,11 @@ function RunDetailSidebar({ run, runCases, profiles, onShare, onExport, onCancel
         </Button>
       </div>
 
+      {run.review_outcome === "rejected" && (
+        <Button className="w-full justify-center" onClick={onRerun}>
+          <RotateCcw size={14} /> Executar novamente
+        </Button>
+      )}
       {run.status === "active" && (
         <div className="flex gap-2">
           <Button variant="secondary" className="flex-1 justify-center" onClick={onCancel}>
@@ -51,7 +60,18 @@ function RunDetailSidebar({ run, runCases, profiles, onShare, onExport, onCancel
       <div className="flex flex-col gap-3 pt-2 border-t border-border">
         <div>
           <p className="text-xs text-muted-foreground mb-1">Status</p>
-          <Badge variant={statusBadgeVariant(run.status)}>{statusLabel(run.status)}</Badge>
+          <Badge variant={display.variant}>{display.label}</Badge>
+        </div>
+        <div>
+          <div className="mb-1 flex items-center justify-between">
+            <p className="text-xs text-muted-foreground">Tarefa e retrabalho</p>
+            <button type="button" onClick={onEditReview} className="cursor-pointer text-xs font-medium text-brand hover:underline">
+              Editar
+            </button>
+          </div>
+          <p className="text-sm font-semibold text-foreground">{run.task_ref ? taskLabel(run.task_ref) : "Sem tarefa"}</p>
+          <p className="text-xs text-muted-foreground">Dev: {devName ?? "não informado"}</p>
+          {!run.review_outcome && <p className="mt-1.5 text-xs text-muted-foreground">Rodada sem avaliação</p>}
         </div>
         <div>
           <p className="text-xs text-muted-foreground mb-1">Iniciado por</p>

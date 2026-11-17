@@ -1,6 +1,9 @@
 export type RunStatus = "active" | "completed" | "cancelled";
 export type RunCaseResultStatus = "untested" | "passed" | "failed" | "blocked" | "skipped" | "pre_existing";
 
+/** Como a rodada de uma tarefa terminou: aprovada, ou reprovada e devolvida ao dev (um retorno). Vazio = não se aplica. */
+export type RunReviewOutcome = "approved" | "rejected";
+
 export interface TestRun {
   id: string;
   seq: number;
@@ -16,6 +19,13 @@ export interface TestRun {
   created_at: string;
   completed_at: string | null;
   cancellation_reason_id: string | null;
+  /** A tarefa que esta execução testa (texto livre, em geral o card do Jira). Várias execuções podem ser da mesma tarefa. */
+  task_ref: string | null;
+  /** O dev responsável pela tarefa (contato do tipo dev). */
+  dev_contact_id: string | null;
+  review_outcome: RunReviewOutcome | null;
+  reviewed_at: string | null;
+  reviewed_by: string | null;
 }
 
 export interface TestRunListItem extends TestRun {
@@ -96,6 +106,7 @@ export interface RunDefect {
   severity: string;
   status: string;
   test_run_case_id: string | null;
+  dev_contact_id?: string | null;
 }
 
 export interface Profile {

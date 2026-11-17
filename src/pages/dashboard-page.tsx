@@ -7,11 +7,13 @@ import { DateFilterBar, type PresetKey } from "@/pages/dashboard/date-filter-bar
 import { OverviewTab } from "@/pages/dashboard/overview-tab";
 import { DefectsTab } from "@/pages/dashboard/defects-tab";
 import { RunsTab } from "@/pages/dashboard/runs-tab";
+import { ReworkTab } from "@/pages/dashboard/rework-tab";
 
 const TABS = [
   { key: "overview", label: "Visão geral" },
   { key: "defects", label: "Defeitos" },
   { key: "runs", label: "Execuções" },
+  { key: "rework", label: "Retrabalho" },
 ];
 
 function DashboardPage() {
@@ -82,6 +84,7 @@ function DashboardPage() {
       {tab === "overview" && <OverviewTab data={data} inRange={inRange} />}
       {tab === "defects" && <DefectsTab data={data} inRange={inRange} />}
       {tab === "runs" && <RunsTab data={data} inRange={inRange} />}
+      {tab === "rework" && <ReworkTab data={data} inRange={inRange} />}
     </div>
   );
 }

@@ -9,6 +9,7 @@ import { supabase } from "@/lib/supabase";
 import { useProject } from "@/contexts/project-context";
 import { useAuth } from "@/contexts/auth-context";
 import { toast } from "sonner";
+import { cleanTaskRef } from "@/lib/run-review";
 
 interface CaseOption {
   id: string;
@@ -19,6 +20,11 @@ interface PlanOption {
   id: string;
   title: string;
   caseIds: string[];
+}
+
+interface DevOption {
+  id: string;
+  name: string;
 }
 
 interface NewRunModalProps {
@@ -42,6 +48,9 @@ function NewRunModal({ open, onClose, onCreated }: NewRunModalProps) {
 
   const [title, setTitle] = React.useState("");
   const [environment, setEnvironment] = React.useState("Homologação");
+  const [taskRef, setTaskRef] = React.useState("");
+  const [devId, setDevId] = React.useState("");
+  const [devs, setDevs] = React.useState<DevOption[]>([]);
   const [source, setSource] = React.useState<"repository" | "plan">("repository");
   const [selectedCaseIds, setSelectedCaseIds] = React.useState<Set<string>>(new Set());
   const [selectedPlanId, setSelectedPlanId] = React.useState("");
@@ -52,6 +61,8 @@ function NewRunModal({ open, onClose, onCreated }: NewRunModalProps) {
     setLoadingData(true);
     setTitle("");
     setEnvironment("Homologação");
+    setTaskRef("");
+    setDevId("");
     setSource("repository");
     setSelectedCaseIds(new Set());
     setSelectedPlanId("");
@@ -69,8 +80,10 @@ function NewRunModal({ open, onClose, onCreated }: NewRunModalProps) {
         .eq("project_id", activeProject.id)
         .order("created_at", { ascending: false }),
       supabase.from("test_plan_cases").select("test_plan_id, test_case_id"),
-    ]).then(([casesRes, plansRes, planCasesRes]) => {
+      supabase.from("contacts").select("id, name").eq("kind", "dev").eq("is_active", true).order("name"),
+    ]).then(([casesRes, plansRes, planCasesRes, devsRes]) => {
       setCases((casesRes.data as CaseOption[]) ?? []);
+      setDevs((devsRes.data as DevOption[]) ?? []);
       const planCasesAll = planCasesRes.data ?? [];
       setPlans(
         ((plansRes.data as { id: string; title: string }[]) ?? []).map((p) => ({
@@ -122,7 +135,14 @@ function NewRunModal({ open, onClose, onCreated }: NewRunModalProps) {
     setSaving(true);
     const { data: run, error } = await supabase
       .from("test_runs")
-      .insert({ project_id: activeProject.id, title: title.trim(), environment, created_by: user.id })
+      .insert({
+        project_id: activeProject.id,
+        title: title.trim(),
+        environment,
+        created_by: user.id,
+        task_ref: cleanTaskRef(taskRef),
+        dev_contact_id: devId || null,
+      })
       .select()
       .single();
     if (error) {
@@ -174,6 +194,24 @@ function NewRunModal({ open, onClose, onCreated }: NewRunModalProps) {
             fato num ambiente produtivo.
           </p>
         </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Input
+            label="Tarefa (opcional)"
+            value={taskRef}
+            onChange={(e) => setTaskRef(e.target.value)}
+            placeholder="Ex: MOB-11270"
+          />
+          <Select
+            label="Dev responsável (opcional)"
+            value={devId}
+            onChange={setDevId}
+            options={[{ value: "", label: "— Nenhum —" }, ...devs.map((d) => ({ value: d.id, label: d.name }))]}
+          />
+        </div>
+        <p className="-mt-2 text-xs text-muted-foreground">
+          Usados na métrica de retrabalho: ao concluir a execução, você diz se a tarefa foi aprovada ou reprovada e devolvida
+          ao dev. Execuções da mesma tarefa são agrupadas pra contar as rodadas.
+        </p>
 
         <div className="flex flex-col gap-2">
           <span className="text-sm font-medium text-foreground">Origem dos casos de teste</span>

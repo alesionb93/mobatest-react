@@ -2,12 +2,15 @@ import * as React from "react";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
 import { useProject } from "@/contexts/project-context";
+import { useAuth } from "@/contexts/auth-context";
+import { buildReviewPatch, type ReviewInput } from "@/lib/run-review";
 import { collectEvidencePaths, removeEvidenceFiles } from "@/lib/run-case-evidences";
 import type { TestRun, TestRunCase, RunDefect, Profile } from "@/types/test-runs";
 import type { TestSuite } from "@/types/test-cases";
 
 export function useRunDetail(runId: string | undefined) {
   const { activeProject } = useProject();
+  const { user } = useAuth();
   const [run, setRun] = React.useState<TestRun | null>(null);
   const [runCases, setRunCases] = React.useState<TestRunCase[]>([]);
   const [suites, setSuites] = React.useState<TestSuite[]>([]);
@@ -15,6 +18,7 @@ export function useRunDetail(runId: string | undefined) {
   const [profiles, setProfiles] = React.useState<Record<string, Profile>>({});
   const [loading, setLoading] = React.useState(true);
   const [notFound, setNotFound] = React.useState(false);
+  const [devName, setDevName] = React.useState<string | null>(null);
   const hasLoadedOnceRef = React.useRef(false);
 
   const load = React.useCallback(async () => {
@@ -47,7 +51,7 @@ export function useRunDetail(runId: string | undefined) {
     const runCaseIds = safeRunCases.map((rc) => rc.id);
 
     const defectsRes = runCaseIds.length
-      ? await supabase.from("defects").select("id, seq, title, severity, status, test_run_case_id").in("test_run_case_id", runCaseIds)
+      ? await supabase.from("defects").select("id, seq, title, severity, status, test_run_case_id, dev_contact_id").in("test_run_case_id", runCaseIds)
       : { data: [] as RunDefect[] };
 
     const userIds = new Set<string>();
@@ -66,7 +70,15 @@ export function useRunDetail(runId: string | undefined) {
       (profilesData ?? []).forEach((p) => (profilesMap[p.id] = p as Profile));
     }
 
+    // O nome do dev responsável pela tarefa (se a execução tem um).
+    let devNameFound: string | null = null;
+    if (runRes.data.dev_contact_id) {
+      const { data: dev } = await supabase.from("contacts").select("name").eq("id", runRes.data.dev_contact_id).maybeSingle();
+      devNameFound = (dev as { name: string } | null)?.name ?? null;
+    }
+
     setRun(runRes.data as TestRun);
+    setDevName(devNameFound);
     setRunCases(safeRunCases);
     setSuites((suitesRes.data as TestSuite[]) ?? []);
     setDefects((defectsRes.data as RunDefect[]) ?? []);
@@ -79,17 +91,34 @@ export function useRunDetail(runId: string | undefined) {
     load();
   }, [load]);
 
-  async function completeRun() {
+  /** Conclui a execução já registrando como a rodada terminou (aprovada, reprovada e devolvida ao dev, ou não se aplica). */
+  async function completeRun(review: ReviewInput) {
     if (!run) return;
+    const now = new Date().toISOString();
     const { error } = await supabase
       .from("test_runs")
-      .update({ status: "completed", completed_at: new Date().toISOString() })
+      .update({ ...buildReviewPatch(review, run, user?.id ?? null, now), status: "completed", completed_at: now })
       .eq("id", run.id);
     if (error) {
       toast.error("Erro ao concluir execução: " + error.message);
       return;
     }
     toast.success("Execução concluída!");
+    await load();
+  }
+
+  /** Corrige a tarefa, o dev ou o resultado da rodada de uma execução (sem mudar o status dela). */
+  async function saveReview(review: ReviewInput) {
+    if (!run) return;
+    const { error } = await supabase
+      .from("test_runs")
+      .update(buildReviewPatch(review, run, user?.id ?? null, new Date().toISOString()))
+      .eq("id", run.id);
+    if (error) {
+      toast.error("Erro ao salvar a avaliação: " + error.message);
+      return;
+    }
+    toast.success("Avaliação salva.");
     await load();
   }
 
@@ -164,8 +193,10 @@ export function useRunDetail(runId: string | undefined) {
     suites,
     defects,
     profiles,
+    devName,
     reload: load,
     completeRun,
+    saveReview,
     cancelRun,
     togglePublic,
     ensureReportToken,

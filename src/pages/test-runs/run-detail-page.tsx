@@ -22,8 +22,10 @@ import type { TestRunCase } from "@/types/test-runs";
 import { ShareReportModal } from "@/pages/test-runs/share-report-modal";
 import { ExportRunModal } from "@/pages/test-runs/export-run-modal";
 import { CancelRunModal } from "@/pages/test-runs/cancel-run-modal";
+import { RunReviewModal } from "@/pages/test-runs/run-review-modal";
+import { RerunModal } from "@/pages/test-runs/rerun-modal";
+import { runDisplayStatus, suggestDevId } from "@/lib/run-review";
 import { exportRunAsCSV, exportRunAsPDF } from "@/pages/test-runs/export-run";
-import { statusBadgeVariant, statusLabel } from "@/lib/labels";
 
 function RunDetailPage({ runId }: { runId: string }) {
   const navigate = useNavigate();
@@ -37,8 +39,10 @@ function RunDetailPage({ runId }: { runId: string }) {
     suites,
     defects,
     profiles,
+    devName,
     reload,
     completeRun,
+    saveReview,
     cancelRun,
     togglePublic,
     ensureReportToken,
@@ -53,6 +57,9 @@ function RunDetailPage({ runId }: { runId: string }) {
   const [shareOpen, setShareOpen] = React.useState(false);
   const [exportOpen, setExportOpen] = React.useState(false);
   const [cancelOpen, setCancelOpen] = React.useState(false);
+  const [completeOpen, setCompleteOpen] = React.useState(false);
+  const [reviewOpen, setReviewOpen] = React.useState(false);
+  const [rerunOpen, setRerunOpen] = React.useState(false);
   const [bulkRunCases, setBulkRunCases] = React.useState<TestRunCase[] | null>(null);
 
   // Havia uma fila de automação rodando pra ESSA execução quando a aba
@@ -111,7 +118,7 @@ function RunDetailPage({ runId }: { runId: string }) {
       <div>
         <div className="flex items-center gap-3">
           <h1 className="text-lg font-semibold text-foreground">{run.title}</h1>
-          <Badge variant={statusBadgeVariant(run.status)}>{statusLabel(run.status)}</Badge>
+          <Badge variant={runDisplayStatus(run.status, run.review_outcome).variant}>{runDisplayStatus(run.status, run.review_outcome).label}</Badge>
           {run.is_public && <Badge variant="info">Link público ativo</Badge>}
         </div>
         <p className="text-sm text-muted-foreground mt-1">
@@ -154,12 +161,13 @@ function RunDetailPage({ runId }: { runId: string }) {
           run={run}
           runCases={runCases}
           profiles={profiles}
+          devName={devName}
           onShare={() => setShareOpen(true)}
           onExport={() => setExportOpen(true)}
           onCancel={() => setCancelOpen(true)}
-          onComplete={() => {
-            if (confirm("Marcar esta execução como concluída?")) completeRun();
-          }}
+          onComplete={() => setCompleteOpen(true)}
+          onEditReview={() => setReviewOpen(true)}
+          onRerun={() => setRerunOpen(true)}
         />
       </div>
 
@@ -215,6 +223,37 @@ function RunDetailPage({ runId }: { runId: string }) {
       />
 
       <CancelRunModal open={cancelOpen} onClose={() => setCancelOpen(false)} onConfirm={cancelRun} />
+
+      <RunReviewModal
+        open={completeOpen}
+        onClose={() => setCompleteOpen(false)}
+        mode="complete"
+        run={run}
+        suggestedDevId={suggestDevId(defects.map((d) => d.dev_contact_id))}
+        bugCount={defects.length}
+        onConfirm={completeRun}
+      />
+      <RunReviewModal
+        open={reviewOpen}
+        onClose={() => setReviewOpen(false)}
+        mode="edit"
+        run={run}
+        suggestedDevId={suggestDevId(defects.map((d) => d.dev_contact_id))}
+        bugCount={defects.length}
+        onConfirm={saveReview}
+      />
+
+      <RerunModal
+        open={rerunOpen}
+        onClose={() => setRerunOpen(false)}
+        run={run}
+        runCases={runCases}
+        projectCode={activeProject?.code ?? ""}
+        onCreated={(newRunId) => {
+          setRerunOpen(false);
+          navigate(`/test-runs/${newRunId}`);
+        }}
+      />
     </div>
   );
 }

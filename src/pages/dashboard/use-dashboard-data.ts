@@ -19,6 +19,10 @@ export interface DashRun {
   created_at: string;
   completed_at: string | null;
   cancellation_reason_id: string | null;
+  task_ref: string | null;
+  dev_contact_id: string | null;
+  review_outcome: "approved" | "rejected" | null;
+  reviewed_at: string | null;
 }
 export interface DashDefect {
   id: string;
@@ -75,7 +79,7 @@ export function useDashboardData() {
         supabase.from("test_suites").select("id, title").eq("project_id", activeProject.id),
         supabase
           .from("test_runs")
-          .select("id, title, status, environment, created_at, completed_at, cancellation_reason_id")
+          .select("id, title, status, environment, created_at, completed_at, cancellation_reason_id, task_ref, dev_contact_id, review_outcome, reviewed_at")
           .eq("project_id", activeProject.id)
           .order("created_at", { ascending: false }),
         supabase.from("defects").select("*").eq("project_id", activeProject.id),
